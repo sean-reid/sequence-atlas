@@ -19,10 +19,10 @@ describe("paths", () => {
 });
 
 describe("hash", () => {
-  it("keeps the view and colour and drops defaults", () => {
-    const state = { x: 0.25, y: -0.5, scale: 12, colour: "order" as const };
+  it("keeps the view and color and drops defaults", () => {
+    const state = { x: 0.25, y: -0.5, scale: 12, color: "order" as const };
     expect(parseHash(formatHash(state))).toEqual(state);
-    expect(formatHash({ x: 0, y: 0, scale: 1, colour: "cluster" })).toBe("");
+    expect(formatHash({ x: 0, y: 0, scale: 1, color: "cluster" })).toBe("");
     expect(parseHash("#z=-3&c=bogus")).toEqual({});
   });
 });

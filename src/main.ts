@@ -4,11 +4,11 @@ import {
   formatPath,
   parseHash,
   parsePath,
-  type Colour,
+  type Color,
   type Family,
   type Route,
 } from "../shared/url.ts";
-import { scheme } from "./colour.ts";
+import { scheme } from "./color.ts";
 import { DataSource, type FamilyData } from "./data.ts";
 import { MapRenderer } from "./map.ts";
 import { Panel } from "./panel.ts";
@@ -19,7 +19,7 @@ const canvas = document.getElementById("map") as HTMLCanvasElement;
 const labelsBox = document.getElementById("labels") as HTMLDivElement;
 const hoverBox = document.getElementById("hover") as HTMLDivElement;
 const themeButton = document.getElementById("theme") as HTMLButtonElement;
-const colourButtons = [...document.querySelectorAll<HTMLButtonElement>(".colours button")];
+const colorButtons = [...document.querySelectorAll<HTMLButtonElement>(".colors button")];
 const legendBox = document.getElementById("legend") as HTMLUListElement;
 const metricButtons = [...document.querySelectorAll<HTMLButtonElement>(".metrics button")];
 
@@ -28,7 +28,7 @@ const renderer = new MapRenderer(canvas);
 const indexes = new Map<Family, PointIndex>();
 let numbers: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
 let route: Route = parsePath(location.pathname);
-let colour: Colour = "cluster";
+let color: Color = "cluster";
 let selectedIndex = -1;
 renderer.reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -53,7 +53,7 @@ function applyPalette(): void {
   const style = getComputedStyle(document.documentElement);
   const read = (name: string) => style.getPropertyValue(name).trim();
   renderer.dark = isDark();
-  const current = scheme(colour, read);
+  const current = scheme(color, read);
   renderer.rememberPalette(current.palette[0]!, current.palette.slice(1), read("--ink"));
   legendBox.replaceChildren(
     ...current.legend.map((item) => {
@@ -66,7 +66,7 @@ function applyPalette(): void {
     }),
   );
   legendBox.hidden = current.legend.length === 0;
-  for (const b of colourButtons) b.classList.toggle("on", b.dataset.colour === colour);
+  for (const b of colorButtons) b.classList.toggle("on", b.dataset.color === color);
   themeButton.textContent = renderer.dark ? "Light" : "Dark";
   themeButton.setAttribute("aria-label", renderer.dark ? "Switch to light" : "Switch to dark");
 }
@@ -136,7 +136,7 @@ function indexOfNumber(n: number): number {
 let hashTimer = 0;
 function writeUrl(replace = false): void {
   const path = formatPath(route);
-  const hash = formatHash({ ...renderer.view, colour });
+  const hash = formatHash({ ...renderer.view, color });
   const url = path + hash;
   if (url === location.pathname + location.hash) return;
   if (replace) history.replaceState(null, "", url);
@@ -161,7 +161,7 @@ async function showFamily(family: Family, push: boolean): Promise<FamilyData> {
   return familyData;
 }
 
-async function select(number: number | null, push: boolean, centre = false): Promise<void> {
+async function select(number: number | null, push: boolean, center = false): Promise<void> {
   const familyData = renderer.family ?? (await data.getFamily(route.family));
   route = { ...route, number };
   selectedIndex = number === null ? -1 : indexOfNumber(number);
@@ -169,7 +169,7 @@ async function select(number: number | null, push: boolean, centre = false): Pro
   if (selectedIndex < 0 || number === null) {
     panel.hide();
   } else {
-    if (centre) renderer.centreOn(selectedIndex, Math.max(renderer.view.scale, 14));
+    if (center) renderer.centerOn(selectedIndex, Math.max(renderer.view.scale, 14));
     void panel.show(number, route.family, familyData, selectedIndex);
   }
   if (push) writeUrl();
@@ -180,7 +180,7 @@ function hover(e: PointerEvent): void {
   const current = renderer.family;
   const index = indexes.get(route.family);
   if (!current || !index) return;
-  const [qx, qy] = renderer.screenToQuantised(e.clientX, e.clientY);
+  const [qx, qy] = renderer.screenToQuantized(e.clientX, e.clientY);
   const hit = index.nearest(qx, qy, renderer.unitsPerPixel() * 12);
   if (hit < 0) {
     hoverBox.hidden = true;
@@ -205,34 +205,34 @@ for (const b of metricButtons) {
   b.addEventListener("click", () => void showFamily(b.dataset.family as Family, true));
 }
 
-async function applyColour(): Promise<void> {
-  if (colour !== "cluster") {
+async function applyColor(): Promise<void> {
+  if (color !== "cluster") {
     try {
-      codes ??= await data.getColours();
+      codes ??= await data.getColors();
     } catch {
-      colour = "cluster";
+      color = "cluster";
     }
   }
   applyPalette();
-  if (colour === "cluster" || !codes) {
-    renderer.colourByCodes(null);
+  if (color === "cluster" || !codes) {
+    renderer.colorByCodes(null);
   } else {
     const style = getComputedStyle(document.documentElement);
-    const current = scheme(colour, (n) => style.getPropertyValue(n).trim());
+    const current = scheme(color, (n) => style.getPropertyValue(n).trim());
     const slots = new Uint8Array(numbers.length);
     for (let i = 0; i < slots.length; i++) {
       slots[i] = current.slot(codes[i * 3] ?? 0, codes[i * 3 + 1] ?? 0, codes[i * 3 + 2] ?? 0);
     }
-    renderer.colourByCodes(slots);
+    renderer.colorByCodes(slots);
   }
   schedule();
   scheduleHash();
 }
 
-for (const b of colourButtons) {
+for (const b of colorButtons) {
   b.addEventListener("click", () => {
-    colour = b.dataset.colour as Colour;
-    void applyColour();
+    color = b.dataset.color as Color;
+    void applyColor();
   });
 }
 
@@ -314,7 +314,7 @@ function endPointer(e: PointerEvent): void {
   if (drag && !drag.moved) {
     const index = indexes.get(route.family);
     if (index) {
-      const [qx, qy] = renderer.screenToQuantised(e.clientX, e.clientY);
+      const [qx, qy] = renderer.screenToQuantized(e.clientX, e.clientY);
       const radius = renderer.unitsPerPixel() * (e.pointerType === "touch" ? 22 : 12);
       const hit = index.nearest(qx, qy, radius);
       void select(hit >= 0 ? numbers[hit]! : null, true);
@@ -358,10 +358,10 @@ async function start(): Promise<void> {
   renderer.resize();
   applyPalette();
   const view = parseHash(location.hash);
-  if (view.colour) colour = view.colour;
+  if (view.color) color = view.color;
   numbers = await data.getNumbers();
   await showFamily(route.family, false);
-  if (colour !== "cluster") await applyColour();
+  if (color !== "cluster") await applyColor();
   if (view.x !== undefined) Object.assign(renderer.view, view);
   if (route.number !== null) await select(route.number, false, view.x === undefined);
   writeUrl(true);

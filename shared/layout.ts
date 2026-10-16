@@ -1,5 +1,5 @@
 // Layout file written by tools/layout: "ATL1", uint32 count, float32 bounds
-// (min x, min y, max x, max y), then count pairs of uint16 x, y quantised
+// (min x, min y, max x, max y), then count pairs of uint16 x, y quantized
 // across those bounds. All little endian.
 
 const MAGIC = 0x314c5441;
@@ -8,7 +8,7 @@ const HEADER_BYTES = 24;
 export interface Layout {
   count: number;
   bounds: [number, number, number, number];
-  /** Interleaved x, y per point in the file's quantised units, 0 to 65535. */
+  /** Interleaved x, y per point in the file's quantized units, 0 to 65535. */
   points: Uint16Array;
 }
 

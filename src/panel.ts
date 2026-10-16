@@ -1,6 +1,6 @@
 import { formatANumber } from "../shared/anumber.ts";
 import type { Family } from "../shared/url.ts";
-import type { BaseEntry, DataSource, FamilyData, NeighbourRow } from "./data.ts";
+import type { BaseEntry, DataSource, FamilyData, NeighborRow } from "./data.ts";
 
 const FAMILY_NAMES: Record<Family, string> = {
   all: "combined",
@@ -71,7 +71,7 @@ export class Panel {
     el("p-name").textContent = base.name;
     el("p-terms").textContent = base.terms.split(",").join(", ") + ", …";
     el("p-keywords").textContent = base.keywords.join(" ");
-    const [growth, order] = base.colour;
+    const [growth, order] = base.color;
     const bits = [GROWTH[growth] ?? ""];
     if (order > 0) bits.push(`linear recurrence of order ${order}`);
     const summary = document.createElement("span");
@@ -85,8 +85,8 @@ export class Panel {
     }
     el("p-summary").replaceChildren(summary);
 
-    const [rows, phrases]: [NeighbourRow[], string[]] = await Promise.all([
-      this.deps.data.getNeighbours(number, family).catch(() => []),
+    const [rows, phrases]: [NeighborRow[], string[]] = await Promise.all([
+      this.deps.data.getNeighbors(number, family).catch(() => []),
       this.deps.data
         .getFeatureNames()
         .then((f) => (f[family] ?? []).map((c) => c.phrase))
@@ -123,6 +123,6 @@ export class Panel {
 function loading(): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "loading";
-  li.textContent = "Loading neighbours";
+  li.textContent = "Loading neighbors";
   return li;
 }

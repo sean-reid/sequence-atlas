@@ -31,10 +31,10 @@ export interface BaseEntry {
   offset: number;
   keywords: string[];
   cluster: Partial<Record<Family, number | null>>;
-  colour: [number, number, number];
+  color: [number, number, number];
 }
 
-export type NeighbourRow = [number, number, number];
+export type NeighborRow = [number, number, number];
 
 export interface FeatureNames {
   [family: string]: { name: string; phrase: string }[];
@@ -54,7 +54,7 @@ export class DataSource {
   private numbers: Promise<Uint32Array> | null = null;
   private features: Promise<FeatureNames> | null = null;
   private shards = new Map<string, Promise<Record<string, unknown>>>();
-  private colours: Promise<Uint8Array> | null = null;
+  private colors: Promise<Uint8Array> | null = null;
 
   async getManifest(): Promise<Manifest> {
     this.manifest ??= fetchOk("/data/manifest.json").then((r) => r.json() as Promise<Manifest>);
@@ -77,12 +77,12 @@ export class DataSource {
   }
 
   /** Three bytes per sequence: growth class, recurrence order, keyword group. */
-  async getColours(): Promise<Uint8Array> {
-    this.colours ??= this.url("colour.u8")
+  async getColors(): Promise<Uint8Array> {
+    this.colors ??= this.url("color.u8")
       .then(fetchOk)
       .then((r) => r.arrayBuffer())
       .then((b) => new Uint8Array(b));
-    return this.colours;
+    return this.colors;
   }
 
   getFamily(family: Family): Promise<FamilyData> {
@@ -138,8 +138,8 @@ export class DataSource {
     return (shard[formatANumber(number)] as BaseEntry | undefined) ?? null;
   }
 
-  async getNeighbours(number: number, family: Family): Promise<NeighbourRow[]> {
+  async getNeighbors(number: number, family: Family): Promise<NeighborRow[]> {
     const shard = await this.shard(family, number);
-    return (shard[formatANumber(number)] as NeighbourRow[] | undefined) ?? [];
+    return (shard[formatANumber(number)] as NeighborRow[] | undefined) ?? [];
   }
 }

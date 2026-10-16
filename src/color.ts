@@ -1,15 +1,15 @@
-import type { Colour } from "../shared/url.ts";
+import type { Color } from "../shared/url.ts";
 
 export interface Legend {
   swatch: string;
   label: string;
 }
 
-export interface ColourScheme {
-  /** Nine hex colours: slot 0 for points outside the scheme, then eight classes. */
+export interface ColorScheme {
+  /** Nine hex colors: slot 0 for points outside the scheme, then eight classes. */
   palette: string[];
   legend: Legend[];
-  /** Palette slot for one sequence given its three colour codes. */
+  /** Palette slot for one sequence given its three color codes. */
   slot: (growth: number, order: number, keyword: number) => number;
 }
 
@@ -35,11 +35,11 @@ const ORDER_BUCKETS: [string, (o: number) => boolean][] = [
 
 const KEYWORDS = ["core", "nice", "hard", "base", "mult", "tabl or tabf", "cons", "easy"];
 
-export function scheme(colour: Colour, css: (name: string) => string): ColourScheme {
+export function scheme(color: Color, css: (name: string) => string): ColorScheme {
   const noise = css("--noise");
   const categorical = ["--c1", "--c2", "--c3", "--c4", "--c5", "--c6", "--c7", "--c8"].map(css);
   const ramp = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7"].map(css);
-  switch (colour) {
+  switch (color) {
     case "growth":
       return {
         palette: [noise, ...ramp, noise],

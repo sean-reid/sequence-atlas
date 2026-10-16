@@ -17,7 +17,7 @@ const fixture = () => {
 };
 
 describe("parseLayout", () => {
-  it("reads the python writer's output back within quantisation error", () => {
+  it("reads the python writer's output back within quantization error", () => {
     const layout = parseLayout(fixture());
     expect(layout.count).toBe(5);
     expect(layout.bounds).toEqual([-3.5, -7.75, 10.25, 2.0]);

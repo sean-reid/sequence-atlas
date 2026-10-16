@@ -2,8 +2,8 @@ import { formatANumber, parseANumber } from "./anumber.ts";
 
 export const FAMILIES = ["all", "growth", "arith", "recur", "graph"] as const;
 export type Family = (typeof FAMILIES)[number];
-export const COLOURS = ["cluster", "growth", "order", "keyword"] as const;
-export type Colour = (typeof COLOURS)[number];
+export const COLORS = ["cluster", "growth", "order", "keyword"] as const;
+export type Color = (typeof COLORS)[number];
 
 export interface Route {
   number: number | null;
@@ -14,7 +14,7 @@ export interface ViewState {
   x: number;
   y: number;
   scale: number;
-  colour: Colour;
+  color: Color;
 }
 
 export function isFamily(text: string | null | undefined): text is Family {
@@ -53,7 +53,7 @@ export function parseHash(hash: string): Partial<ViewState> {
   if (y !== undefined) out.y = y;
   if (z !== undefined && z > 0) out.scale = z;
   const c = params.get("c");
-  if (c && (COLOURS as readonly string[]).includes(c)) out.colour = c as Colour;
+  if (c && (COLORS as readonly string[]).includes(c)) out.color = c as Color;
   return out;
 }
 
@@ -64,7 +64,7 @@ export function formatHash(state: ViewState): string {
     params.set("y", String(round(state.y)));
     params.set("z", String(round(state.scale)));
   }
-  if (state.colour !== "cluster") params.set("c", state.colour);
+  if (state.color !== "cluster") params.set("c", state.color);
   const text = params.toString();
   return text ? `#${text}` : "";
 }

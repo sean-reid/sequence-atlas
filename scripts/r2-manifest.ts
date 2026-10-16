@@ -1,4 +1,4 @@
-// Publishes the artefact directory's manifest as the bucket's live manifest,
+// Publishes the artifact directory's manifest as the bucket's live manifest,
 // which is the moment the site switches to a new snapshot.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -6,7 +6,7 @@ import { join } from "node:path";
 const dir = process.argv[2] ?? "";
 const prefix = process.argv[3] ?? "";
 if (!dir || !prefix) {
-  console.error("usage: node scripts/r2-manifest.ts <artefact-dir> <key-prefix>");
+  console.error("usage: node scripts/r2-manifest.ts <artifact-dir> <key-prefix>");
   process.exit(2);
 }
 const token = process.env.CLOUDFLARE_API_TOKEN;
