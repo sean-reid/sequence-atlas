@@ -533,7 +533,7 @@ def run_embed(features_dir, out, families, sample, epochs):
 
 
 def write_manifest(path, count, families, snapshot):
-    manifest = {"version": time.strftime("%Y%m%d"), "count": int(count), "families": list(families), "snapshot": snapshot}
+    manifest = {"version": time.strftime("%Y%m%d"), "build": "local", "count": int(count), "families": list(families), "snapshot": snapshot}
     json.dump(manifest, open(path, "w"))
     return manifest
 
