@@ -8,6 +8,7 @@ import {
   type Family,
   type Route,
 } from "../shared/url.ts";
+import { scheme } from "./colour.ts";
 import { DataSource, type FamilyData } from "./data.ts";
 import { MapRenderer } from "./map.ts";
 import { Panel } from "./panel.ts";
@@ -19,6 +20,7 @@ const labelsBox = document.getElementById("labels") as HTMLDivElement;
 const hoverBox = document.getElementById("hover") as HTMLDivElement;
 const themeButton = document.getElementById("theme") as HTMLButtonElement;
 const colourSelect = document.getElementById("colour") as HTMLSelectElement;
+const legendBox = document.getElementById("legend") as HTMLUListElement;
 const metricButtons = [...document.querySelectorAll<HTMLButtonElement>(".metrics button")];
 
 const data = new DataSource();
@@ -45,15 +47,26 @@ function isDark(): boolean {
   return matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+let codes: Uint8Array | null = null;
+
 function applyPalette(): void {
   const style = getComputedStyle(document.documentElement);
   const read = (name: string) => style.getPropertyValue(name).trim();
   renderer.dark = isDark();
-  renderer.rememberPalette(
-    read("--noise"),
-    ["--c1", "--c2", "--c3", "--c4", "--c5", "--c6", "--c7", "--c8"].map(read),
-    read("--ink"),
+  const current = scheme(colour, read);
+  renderer.rememberPalette(current.palette[0]!, current.palette.slice(1), read("--ink"));
+  legendBox.replaceChildren(
+    ...current.legend.map((item) => {
+      const li = document.createElement("li");
+      const swatch = document.createElement("span");
+      swatch.className = "swatch";
+      swatch.style.background = item.swatch;
+      li.append(swatch, item.label);
+      return li;
+    }),
   );
+  legendBox.hidden = current.legend.length === 0;
+  legendBox.classList.toggle("beside-panel", !document.getElementById("panel")!.hidden);
   themeButton.textContent = renderer.dark ? "Light" : "Dark";
   themeButton.setAttribute("aria-label", renderer.dark ? "Switch to light" : "Switch to dark");
 }
@@ -86,8 +99,10 @@ function placeLabels(): void {
   const h = canvas.clientHeight;
   const placed = chromeRects();
   const budget = (w < 768 ? 14 : 48) + placed.length;
+  const seen = new Set<string>();
   for (const c of current.info) {
     if (placed.length >= budget) break;
+    if (seen.has(c.label)) continue;
     const [x, y] = renderer.toScreen(c.cx, c.cy);
     if (x < 0 || y < 0 || x > w || y > h) continue;
     const bw = c.label.length * 6.6 + 8;
@@ -96,6 +111,7 @@ function placeLabels(): void {
       continue;
     }
     placed.push(box);
+    seen.add(c.label);
     const span = document.createElement("span");
     span.style.left = `${x}px`;
     span.style.top = `${y}px`;
@@ -152,7 +168,9 @@ async function select(number: number | null, push: boolean, centre = false): Pro
   renderer.selected = selectedIndex;
   if (selectedIndex < 0 || number === null) {
     panel.hide();
+    legendBox.classList.remove("beside-panel");
   } else {
+    legendBox.classList.add("beside-panel");
     if (centre) renderer.centreOn(selectedIndex, Math.max(renderer.view.scale, 14));
     void panel.show(number, route.family, familyData, selectedIndex);
   }
@@ -189,8 +207,26 @@ for (const b of metricButtons) {
   b.addEventListener("click", () => void showFamily(b.dataset.family as Family, true));
 }
 
+async function applyColour(): Promise<void> {
+  applyPalette();
+  if (colour === "cluster") {
+    renderer.colourByCodes(null);
+  } else {
+    codes ??= await data.getColours();
+    const style = getComputedStyle(document.documentElement);
+    const current = scheme(colour, (n) => style.getPropertyValue(n).trim());
+    const slots = new Uint8Array(numbers.length);
+    for (let i = 0; i < slots.length; i++) {
+      slots[i] = current.slot(codes[i * 3] ?? 0, codes[i * 3 + 1] ?? 0, codes[i * 3 + 2] ?? 0);
+    }
+    renderer.colourByCodes(slots);
+  }
+  schedule();
+}
+
 colourSelect.addEventListener("change", () => {
   colour = colourSelect.value as Colour;
+  void applyColour();
   scheduleHash();
 });
 
@@ -312,6 +348,7 @@ async function start(): Promise<void> {
   }
   numbers = await data.getNumbers();
   await showFamily(route.family, false);
+  if (colour !== "cluster") await applyColour();
   if (view.x !== undefined) Object.assign(renderer.view, view);
   if (route.number !== null) await select(route.number, false, view.x === undefined);
   writeUrl(true);

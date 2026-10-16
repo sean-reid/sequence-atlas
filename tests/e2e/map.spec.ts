@@ -72,3 +72,19 @@ test("search lists matches and picking one selects it", async ({ page }) => {
   await page.fill("#q", "zzz");
   await expect(page.locator("#results .note")).toHaveText("Nothing matches.");
 });
+
+test("the colour variable recolours the map, shows a legend, and survives a reload", async ({
+  page,
+}, info) => {
+  test.skip(info.project.name === "mobile", "the colour control is hidden on phones");
+  await page.goto("/");
+  await expect(page.locator("body[data-ready]")).toBeVisible();
+  await expect(page.locator("#legend")).toBeHidden();
+  await page.selectOption("#colour", "growth");
+  await expect(page).toHaveURL(/c=growth/);
+  await expect(page.locator("#legend li")).toHaveCount(8);
+  await page.reload();
+  await expect(page.locator("body[data-ready]")).toBeVisible();
+  await expect(page.locator("#colour")).toHaveValue("growth");
+  await page.screenshot({ path: info.outputPath("growth-colour.png") });
+});

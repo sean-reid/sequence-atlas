@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>sequence-atlas</title>
+    <title>sequence atlas</title>
     <meta
       name="description"
       content="A map of the OEIS: every integer sequence as a point, near the sequences it is alike."
@@ -38,7 +38,7 @@
 
     <header class="top">
       <div class="brand">
-        <h1 class="wordmark">sequence-atlas</h1>
+        <h1 class="wordmark">sequence atlas</h1>
         <p class="lede">
           Every OEIS sequence as a point, beside the sequences it is alike. Pick a measure, then a
           point.
@@ -65,7 +65,7 @@
         />
         <ol class="results" id="results" hidden></ol>
       </form>
-      <label class="colour" hidden>
+      <label class="colour">
         <span class="visually-hidden">Colour points by</span>
         <select id="colour">
           <option value="cluster">Colour: cluster</option>
@@ -76,6 +76,8 @@
       </label>
       <button type="button" id="theme" class="theme">Light</button>
     </div>
+
+    <ul class="legend" id="legend" hidden></ul>
 
     <aside class="panel" id="panel" aria-label="Selected sequence" hidden>
       <header class="panel-head">

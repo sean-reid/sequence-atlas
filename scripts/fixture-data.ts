@@ -85,6 +85,15 @@ function layout(family: string): void {
 }
 FAMILIES.forEach(layout);
 
+const colour = new Uint8Array(COUNT * 3);
+for (let i = 0; i < COUNT; i++) {
+  const c = i % 3;
+  colour[i * 3] = c + 1;
+  colour[i * 3 + 1] = c === 0 ? 2 : 0;
+  colour[i * 3 + 2] = c === 0 ? 1 : 8;
+}
+writeFileSync(join(dir, "colour.u8"), Buffer.from(colour.buffer));
+
 const columns = ["growth rate", "parity balance", "recurrence order"];
 writeFileSync(
   join(dir, "features.json"),

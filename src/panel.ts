@@ -63,7 +63,7 @@ export class Panel {
     const cluster =
       clusterId === undefined || clusterId === 65535 ? null : familyData.byId.get(clusterId);
     if (!base) {
-      el("p-name").textContent = "Details are not available offline.";
+      el("p-name").textContent = "This snapshot has no details for this sequence.";
       el("p-summary").textContent = cluster ? `Island: ${cluster.label}.` : "";
       near.replaceChildren();
       return;
@@ -112,7 +112,7 @@ export class Panel {
       nm.textContent = names[i]?.name ?? "";
       const why = document.createElement("span");
       why.className = "why";
-      why.textContent = [phrases[row[1]], phrases[row[2]]].filter(Boolean).join(", ");
+      why.textContent = [...new Set([phrases[row[1]], phrases[row[2]]].filter(Boolean))].join(", ");
       button.append(idSpan, nm, why);
       li.append(button);
       near.append(li);
