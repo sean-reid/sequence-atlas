@@ -6,7 +6,7 @@ use super::period;
 pub const MAX_ORDER: usize = 12;
 pub const MAX_DEGREE: usize = 10;
 
-pub const NAMES: [&str; 10] = [
+pub const NAMES: [&str; 9] = [
     "r_order",
     "r_found",
     "r_diff_degree",
@@ -16,7 +16,6 @@ pub const NAMES: [&str; 10] = [
     "r_period",
     "r_periodic",
     "r_eventually_constant",
-    "r_log_terms_per_order",
 ];
 
 pub fn push(terms: &[Term], _offset: i32, row: &mut Vec<f32>) {

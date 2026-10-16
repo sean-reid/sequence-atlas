@@ -2,8 +2,7 @@ use crate::terms::Term;
 
 use super::fit;
 
-pub const NAMES: [&str; 20] = [
-    "g_log_count",
+pub const NAMES: [&str; 19] = [
     "g_log_last",
     "g_log_max",
     "g_poly_slope",
@@ -101,7 +100,6 @@ pub fn push(terms: &[Term], offset: i32, row: &mut Vec<f32>) {
     };
 
     for v in [
-        nf.log10(),
         log_last,
         log_max,
         poly_slope,
