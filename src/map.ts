@@ -212,6 +212,11 @@ export class MapRenderer {
     this.setPalette(noise, hexes, highlight);
   }
 
+  /** Colour every point by a code of its own rather than its cluster. */
+  colourByCodes(slots: Uint8Array | null): void {
+    this.setColourSource(slots ? () => Float32Array.from(slots) : MapRenderer.clusterColours);
+  }
+
   /** Screen position in CSS pixels of a point given in embedding units. */
   toScreen(ex: number, ey: number): [number, number] {
     const data = this.current;

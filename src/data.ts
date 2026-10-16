@@ -54,6 +54,7 @@ export class DataSource {
   private numbers: Promise<Uint32Array> | null = null;
   private features: Promise<FeatureNames> | null = null;
   private shards = new Map<string, Promise<Record<string, unknown>>>();
+  private colours: Promise<Uint8Array> | null = null;
 
   async getManifest(): Promise<Manifest> {
     this.manifest ??= fetchOk("/data/manifest.json").then((r) => r.json() as Promise<Manifest>);
@@ -71,6 +72,15 @@ export class DataSource {
       .then((r) => r.arrayBuffer())
       .then((b) => new Uint32Array(b));
     return this.numbers;
+  }
+
+  /** Three bytes per sequence: growth class, recurrence order, keyword group. */
+  async getColours(): Promise<Uint8Array> {
+    this.colours ??= this.url("colour.u8")
+      .then(fetchOk)
+      .then((r) => r.arrayBuffer())
+      .then((b) => new Uint8Array(b));
+    return this.colours;
   }
 
   getFamily(family: Family): Promise<FamilyData> {

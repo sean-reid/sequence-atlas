@@ -63,7 +63,7 @@ export class Panel {
     const cluster =
       clusterId === undefined || clusterId === 65535 ? null : familyData.byId.get(clusterId);
     if (!base) {
-      el("p-name").textContent = "Details are not available offline.";
+      el("p-name").textContent = "This snapshot has no details for this sequence.";
       el("p-summary").textContent = cluster ? `Island: ${cluster.label}.` : "";
       near.replaceChildren();
       return;

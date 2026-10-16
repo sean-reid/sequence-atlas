@@ -31,6 +31,13 @@
   --c6: #008300;
   --c7: #9085e9;
   --c8: #e66767;
+  --s1: #184f95;
+  --s2: #1c5cab;
+  --s3: #256abf;
+  --s4: #2a78d6;
+  --s5: #3987e5;
+  --s6: #5598e7;
+  --s7: #86b6ef;
   --sans: "Schibsted Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -55,6 +62,13 @@
     --c6: #008300;
     --c7: #6250d6;
     --c8: #e34948;
+    --s1: #86b6ef;
+    --s2: #5598e7;
+    --s3: #3987e5;
+    --s4: #2a78d6;
+    --s5: #256abf;
+    --s6: #1c5cab;
+    --s7: #184f95;
   }
 }
 
@@ -77,6 +91,13 @@
   --c6: #008300;
   --c7: #6250d6;
   --c8: #e34948;
+  --s1: #86b6ef;
+  --s2: #5598e7;
+  --s3: #3987e5;
+  --s4: #2a78d6;
+  --s5: #256abf;
+  --s6: #1c5cab;
+  --s7: #184f95;
 }
 
 * {
@@ -485,10 +506,6 @@ select {
     max-width: none;
   }
 
-  .colour {
-    display: none;
-  }
-
   .panel {
     top: auto;
     left: 0;
@@ -540,4 +557,54 @@ select {
 .near li.loading,
 .panel .note {
   color: var(--ink-faint);
+}
+
+.legend[hidden] {
+  display: none;
+}
+
+.legend {
+  position: fixed;
+  top: 4.5rem;
+  right: 1.25rem;
+  z-index: 1;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  list-style: none;
+  display: grid;
+  gap: 0.2rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend .swatch {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.panel:not([hidden]) ~ .legend,
+.legend.beside-panel {
+  right: 26.5rem;
+}
+
+@media (max-width: 600px) {
+  .legend {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .colour {
+    display: none;
+  }
 }
