@@ -12,6 +12,9 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    launchOptions: {
+      args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+    },
   },
   projects: [
     {
@@ -33,9 +36,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run build && npx wrangler dev --port ${port} --ip 127.0.0.1`,
-    url: `http://127.0.0.1:${port}/`,
-    reuseExistingServer: !process.env.CI,
+    command: `npm run build && node scripts/fixture-data.ts dist/data && npx wrangler dev --port ${port} --ip 127.0.0.1`,
+    url: `http://127.0.0.1:${port}/api/health`,
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });
