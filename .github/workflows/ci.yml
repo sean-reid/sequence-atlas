@@ -52,3 +52,27 @@ jobs:
             playwright-report
             test-results
           retention-days: 7
+
+  tools:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools
+      - run: cargo fmt --check
+      - run: cargo clippy --release -- -D warnings
+      - run: cargo test --release
+      - uses: astral-sh/setup-uv@v7
+        with:
+          working-directory: tools/layout
+      - run: uv sync --locked
+        working-directory: tools/layout
+      - run: uv run python -c "import layout"
+        working-directory: tools/layout
