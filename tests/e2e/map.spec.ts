@@ -76,15 +76,26 @@ test("search lists matches and picking one selects it", async ({ page }) => {
 test("the color variable recolors the map, shows a legend, and survives a reload", async ({
   page,
 }, info) => {
-  test.skip(info.project.name === "mobile", "the color control is hidden on phones");
+  test.skip(
+    info.project.name === "mobile",
+    "phones get the sheet layout, covered by the tablet project",
+  );
+  // Under 768px the color buttons live in a sheet behind the Color button.
+  const openSheet = async () => {
+    const toggle = page.locator("#color-toggle");
+    if (await toggle.isVisible()) await toggle.click();
+  };
   await page.goto("/");
   await expect(page.locator("body[data-ready]")).toBeVisible();
   await expect(page.locator("#legend")).toBeHidden();
+  await openSheet();
   await page.locator(".colors button", { hasText: "Growth" }).click();
   await expect(page).toHaveURL(/c=growth/);
+  await openSheet();
   await expect(page.locator("#legend li")).toHaveCount(8);
   await page.reload();
   await expect(page.locator("body[data-ready]")).toBeVisible();
+  await openSheet();
   await expect(page.locator(".colors button.on")).toHaveText("Growth");
   await page.screenshot({ path: info.outputPath("growth-color.png") });
 });

@@ -1,4 +1,4 @@
-// Emits the SQL that loads the search tables from the layout step's meta.tsv,
+// Emits the SQL that loads the search tables from the feature step's meta.tsv,
 // or a small fixture, in batches D1 accepts.
 import { createReadStream, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";

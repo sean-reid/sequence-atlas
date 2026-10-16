@@ -64,7 +64,12 @@ export class MapRenderer {
   private t = 1;
   private tStart = 0;
   private current: FamilyData | null = null;
-  private colorSource: ((data: FamilyData) => Float32Array) | null = null;
+  private colorSource: ((data: FamilyData) => Float32Array | Uint8Array) | null = null;
+  private uniforms = new Map<string, WebGLUniformLocation | null>();
+  private highlightRgb = new Float32Array(27);
+  /** CSS pixel size, cached so drawing and label placement never read layout. */
+  width = 1;
+  height = 1;
   view: View = { scale: 1.7, x: 0, y: 0 };
   dark = true;
   reduceMotion = false;
@@ -99,9 +104,20 @@ export class MapRenderer {
   }
 
   resize(): void {
-    this.canvas.width = Math.round(this.canvas.clientWidth * this.dpr);
-    this.canvas.height = Math.round(this.canvas.clientHeight * this.dpr);
+    this.width = this.canvas.clientWidth;
+    this.height = this.canvas.clientHeight;
+    this.canvas.width = Math.round(this.width * this.dpr);
+    this.canvas.height = Math.round(this.height * this.dpr);
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  private uniform(name: string): WebGLUniformLocation | null {
+    let loc = this.uniforms.get(name);
+    if (loc === undefined) {
+      loc = this.gl.getUniformLocation(this.program, name);
+      this.uniforms.set(name, loc);
+    }
+    return loc;
   }
 
   private setAttribute(
@@ -120,8 +136,8 @@ export class MapRenderer {
   }
 
   /** Default coloring: slot 0 for noise, the eight palette slots by cluster id. */
-  static clusterColors(data: FamilyData): Float32Array {
-    const out = new Float32Array(data.layout.count);
+  static clusterColors(data: FamilyData): Uint8Array {
+    const out = new Uint8Array(data.layout.count);
     for (let i = 0; i < out.length; i++) {
       const c = data.clusters[i] ?? NOISE;
       out[i] = c === NOISE ? 0 : 1 + (c % 8);
@@ -129,7 +145,7 @@ export class MapRenderer {
     return out;
   }
 
-  setColorSource(source: (data: FamilyData) => Float32Array): void {
+  setColorSource(source: (data: FamilyData) => Float32Array | Uint8Array): void {
     this.colorSource = source;
     if (this.current) this.recolor();
   }
@@ -137,7 +153,9 @@ export class MapRenderer {
   recolor(): void {
     if (!this.current) return;
     const source = this.colorSource ?? MapRenderer.clusterColors;
-    this.setAttribute("color", this.buffers.color, source(this.current), 1, this.gl.FLOAT);
+    const slots = source(this.current);
+    const type = slots instanceof Uint8Array ? this.gl.UNSIGNED_BYTE : this.gl.FLOAT;
+    this.setAttribute("color", this.buffers.color, slots, 1, type);
   }
 
   show(data: FamilyData): void {
@@ -153,8 +171,10 @@ export class MapRenderer {
 
   setPalette(noise: string, hexes: string[], highlight: string): void {
     const flat = [noise, ...hexes].flatMap(hexToRgb);
-    this.gl.uniform3fv(this.gl.getUniformLocation(this.program, "palette"), new Float32Array(flat));
+    this.gl.uniform3fv(this.uniform("palette"), new Float32Array(flat));
     this.highlightColor = highlight;
+    this.highlightRgb.fill(0);
+    this.highlightRgb.set(hexToRgb(highlight));
   }
 
   get animating(): boolean {
@@ -180,11 +200,11 @@ export class MapRenderer {
     if (additive) gl.blendFunc(gl.ONE, gl.ONE);
     else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     const aspect = this.canvas.width / this.canvas.height;
-    const u = (n: string) => gl.getUniformLocation(this.program, n);
+    const u = (n: string) => this.uniform(n);
     gl.uniform1f(u("t"), this.t);
     gl.uniform2f(u("scale"), this.view.scale / aspect, this.view.scale);
     gl.uniform2f(u("offset"), this.view.x, this.view.y);
-    const size = Math.max(1.4, Math.min(9, this.view.scale * 1.15)) * this.dpr;
+    const size = Math.max(1.4, Math.min(14, this.view.scale * 1.15)) * this.dpr;
     gl.uniform1f(u("size"), size);
     gl.uniform1f(
       u("alpha"),
@@ -195,8 +215,7 @@ export class MapRenderer {
     gl.drawArrays(gl.POINTS, 0, this.count);
     if (this.selected >= 0 && this.selected < this.count) {
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      const [r, g, b] = hexToRgb(this.highlightColor);
-      gl.uniform3fv(u("palette"), new Float32Array([r, g, b, ...new Array(24).fill(0)]));
+      gl.uniform3fv(u("palette"), this.highlightRgb);
       gl.uniform1f(u("highlight"), 1);
       gl.uniform1f(u("alpha"), 1);
       gl.uniform1f(u("size"), Math.max(size * 3, 16 * this.dpr));
@@ -208,9 +227,7 @@ export class MapRenderer {
 
   private paletteCache: Float32Array | null = null;
   private restorePalette(): void {
-    if (this.paletteCache) {
-      this.gl.uniform3fv(this.gl.getUniformLocation(this.program, "palette"), this.paletteCache);
-    }
+    if (this.paletteCache) this.gl.uniform3fv(this.uniform("palette"), this.paletteCache);
   }
 
   rememberPalette(noise: string, hexes: string[], highlight: string): void {
@@ -220,7 +237,7 @@ export class MapRenderer {
 
   /** Color every point by a code of its own rather than its cluster. */
   colorByCodes(slots: Uint8Array | null): void {
-    this.setColorSource(slots ? () => Float32Array.from(slots) : MapRenderer.clusterColors);
+    this.setColorSource(slots ? () => slots : MapRenderer.clusterColors);
   }
 
   /** Screen position in CSS pixels of a point given in embedding units. */
@@ -239,13 +256,13 @@ export class MapRenderer {
     const ny = qy / 32767.5 - 1;
     const sx = ((nx * this.view.scale) / aspect + this.view.x + 1) / 2;
     const sy = (1 - (ny * this.view.scale + this.view.y)) / 2;
-    return [sx * this.canvas.clientWidth, sy * this.canvas.clientHeight];
+    return [sx * this.width, sy * this.height];
   }
 
   screenToQuantized(sx: number, sy: number): [number, number] {
     const aspect = this.canvas.width / this.canvas.height;
-    const cx = (sx / this.canvas.clientWidth) * 2 - 1;
-    const cy = 1 - (sy / this.canvas.clientHeight) * 2;
+    const cx = (sx / this.width) * 2 - 1;
+    const cy = 1 - (sy / this.height) * 2;
     const nx = ((cx - this.view.x) * aspect) / this.view.scale;
     const ny = (cy - this.view.y) / this.view.scale;
     return [(nx + 1) * 32767.5, (ny + 1) * 32767.5];
@@ -253,7 +270,7 @@ export class MapRenderer {
 
   /** Quantized units per CSS pixel at the current zoom, along y. */
   unitsPerPixel(): number {
-    return 65536 / (this.canvas.clientHeight * this.view.scale);
+    return 65536 / (this.height * this.view.scale);
   }
 
   /** Center the view on a point index at a given zoom. */

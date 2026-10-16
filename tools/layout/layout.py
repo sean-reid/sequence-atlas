@@ -6,7 +6,7 @@ usage:
   uv run layout.py place <features-dir> <prev-out-dir> <out-dir> --snapshot <date>
 
 embed runs per family and caches the neighbor graph and embedding as .npz and
-.npy under the out dir, so clustering and labelling can be rerun without
+.npy under the out dir, so clustering and labeling can be rerun without
 repeating UMAP. shards reads every family's neighbor graph from the out dir
 and writes the per-sequence files the site fetches, with manifest.json
 recording the count, the families, and the oeisdata commit date given as --snapshot.
@@ -127,7 +127,7 @@ def graph_features(numbers, keywords, xrefs):
     A = ((A + A.T) > 0).astype(np.float64).tocsr()
     deg = np.asarray(A.sum(axis=1)).ravel()
     log(f"xref graph: {n} nodes, {A.nnz // 2} edges, {np.sum(deg == 0)} isolated")
-    # Regularised normalized adjacency (Amini et al.): every pair gains tau/n of
+    # Regularized normalized adjacency (Amini et al.): every pair gains tau/n of
     # an edge, which joins the small components to the whole and stops the top
     # eigenvectors from being component indicators.
     tau = deg.mean()
@@ -284,7 +284,7 @@ CLUSTER_SAMPLE = 120_000
 
 def cluster(Y):
     """HDBSCAN on a subsample of the layout, the rest assigned to the nearest
-    labelled points. Density clusters in two dimensions barely change past
+    labeled points. Density clusters in two dimensions barely change past
     this sample size and the full run takes many times longer."""
     from sklearn.cluster import HDBSCAN
     from sklearn.neighbors import KNeighborsClassifier
@@ -493,8 +493,6 @@ def run_embed(features_dir, out, families, sample, epochs):
     X, cols, numbers, names, keywords = data.X, data.cols, data.numbers, data.names, data.keywords
     log(f"loaded {X.shape[0]} sequences, {X.shape[1]} features")
     numbers.tofile(out / "numbers.u32")
-    with open(out / "names.txt", "w") as f:
-        f.write("\n".join(names))
     graph = graph_features(numbers, keywords, data.xrefs) if needs_graph(families) else None
 
     report = {"count": int(len(numbers)), "families": {}}
@@ -575,7 +573,9 @@ def run_shards(features_dir, out, snapshot):
     for f in families:
         M = family_matrix(f, data.X, data.cols, graph)
         nn = np.load(out / f"{f}.knn.npz")["idx"][:, 1 : NEIGHBORS + 1]
-        why = explain(M, nn)
+        # explain() assumes centered columns; the graph family's keyword flags
+        # and degree are not, so score on a standardized copy.
+        why = explain(standardize(M), nn)
 
         def near(i):
             return [[int(numbers[j]), int(a), int(b)] for j, (a, b) in zip(nn[i], why[i])]
@@ -625,23 +625,31 @@ def run_place(features_dir, prev, out, snapshot):
     known = set(kept)
     added = sorted(int(n) for n in data.numbers if int(n) not in known)
     log(f"{len(kept)} kept, {len(prev_numbers) - len(kept)} gone, {len(added)} new")
-    numbers = np.array(kept + added, dtype=np.uint32)
+    if not kept:
+        raise SystemExit("the previous artifacts share no sequence with the current dumps; refusing to place")
+    # The client binary-searches numbers.u32, so the final order is ascending;
+    # old rows are gathered through prev_rows and new rows through new_rows.
+    numbers = np.array(sorted(kept + added), dtype=np.uint32)
     data = take(data, [current[int(n)] for n in numbers])
-    old_rows = np.arange(len(kept))
-    new_rows = np.arange(len(kept), len(numbers))
+    added_set = set(added)
+    new_rows = np.array([i for i, n in enumerate(numbers) if int(n) in added_set], dtype=np.int64)
+    old_rows = np.array([i for i, n in enumerate(numbers) if int(n) not in added_set], dtype=np.int64)
     prev_index = {int(n): i for i, n in enumerate(prev_numbers)}
-    prev_rows = np.array([prev_index[n] for n in kept], dtype=np.int64)
+    prev_rows = np.array([prev_index[int(numbers[i])] for i in old_rows], dtype=np.int64)
     graph = graph_features(numbers, data.keywords, data.xrefs) if needs_graph(families) else None
     numbers.tofile(out / "numbers.u32")
     for f in families:
         M = family_matrix(f, data.X, data.cols, graph)
-        positions, bounds = read_layout(prev / f"{f}.layout.bin")
-        clusters = np.fromfile(prev / f"{f}.cluster.u16", dtype=np.uint16)
-        positions, clusters = positions[prev_rows], clusters[prev_rows]
+        prev_positions, bounds = read_layout(prev / f"{f}.layout.bin")
+        prev_clusters = np.fromfile(prev / f"{f}.cluster.u16", dtype=np.uint16)
+        positions = np.zeros((len(numbers), 2), dtype=np.float32)
+        clusters = np.full(len(numbers), NOISE, dtype=np.uint16)
+        positions[old_rows] = prev_positions[prev_rows]
+        clusters[old_rows] = prev_clusters[prev_rows]
         if len(new_rows):
-            pos, lab = place_new(M, old_rows, new_rows, positions, clusters)
-            positions = np.vstack([positions, pos])
-            clusters = np.concatenate([clusters, lab])
+            pos, lab = place_new(M, old_rows, new_rows, positions[old_rows], clusters[old_rows])
+            positions[new_rows] = pos
+            clusters[new_rows] = lab
         write_layout(out / f"{f}.layout.bin", positions, bounds)
         clusters.tofile(out / f"{f}.cluster.u16")
         info = json.load(open(prev / f"{f}.clusters.json"))

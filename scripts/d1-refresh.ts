@@ -36,11 +36,18 @@ function readPointer(): "a" | "b" {
     const out = execFileSync(
       "npx",
       ["wrangler", "kv", "key", "get", "live-db", "--namespace-id", KV_ID, "--remote"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
     );
     return out.trim() === "b" ? "b" : "a";
-  } catch {
-    return "a";
+  } catch (error) {
+    const failed = error as { stdout?: string; stderr?: string };
+    const text = `${failed.stdout ?? ""}${failed.stderr ?? ""}`;
+    // Only a key that does not exist yet means the default; anything else
+    // could hide which database is live, and loading the live one is the
+    // one thing this script must never do.
+    if (/404|not found/i.test(text)) return "a";
+    console.error(text);
+    throw error;
   }
 }
 

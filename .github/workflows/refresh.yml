@@ -12,10 +12,9 @@ concurrency:
   group: refresh
   cancel-in-progress: false
 
+# The token is given only to the steps that talk to Cloudflare, never to installs or builds.
 env:
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '860e267e26cbf52bdca301d114b3c203' }}
-  GENERATION: ${{ vars.ATLAS_GENERATION || 'v/20261015b' }}
 
 jobs:
   refresh:
@@ -45,10 +44,23 @@ jobs:
         run: |
           cargo build --release --manifest-path tools/Cargo.toml
           tools/target/release/atlas features data/oeisdata data/features
+      # Each run writes a fresh prefix and the manifest flips to it last, so a
+      # page that loaded mid-run never mixes two snapshots and a failed run
+      # leaves the live one untouched.
+      - name: pick the previous and the new generation
+        run: |
+          previous=$(curl -sSf https://sequence-atlas.dwainosaur.com/data/manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).version))')
+          generation=$(date -u +%Y%m%d)
+          [ "$generation" = "$previous" ] && generation="$generation-$GITHUB_RUN_NUMBER"
+          echo "PREVIOUS=v/$previous" >> "$GITHUB_ENV"
+          echo "GENERATION=v/$generation" >> "$GITHUB_ENV"
+          echo "previous v/$previous, new v/$generation"
       - name: download the previous artifacts
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           mkdir -p data/prev
-          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/sequence-atlas/objects/$GENERATION"
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/sequence-atlas/objects/$PREVIOUS"
           for f in numbers.u32 growth.layout.bin arith.layout.bin recur.layout.bin graph.layout.bin all.layout.bin \
                    growth.cluster.u16 arith.cluster.u16 recur.cluster.u16 graph.cluster.u16 all.cluster.u16 \
                    growth.clusters.json arith.clusters.json recur.clusters.json graph.clusters.json all.clusters.json; do
@@ -60,10 +72,16 @@ jobs:
           uv sync --locked
           uv run layout.py place ../../data/features ../../data/prev ../../data/next --snapshot "$SNAPSHOT"
       - name: upload changed objects
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/r2-sync.ts data/next "$GENERATION"
       - name: load the standby search database and flip
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           node scripts/search-sql.ts data/features/meta.tsv data/search.sql
           node scripts/d1-refresh.ts data/search.sql
       - name: publish the manifest
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/r2-manifest.ts data/next "$GENERATION"

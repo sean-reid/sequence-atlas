@@ -12,3 +12,7 @@ updates:
     directory: /tools
     schedule:
       interval: weekly
+  - package-ecosystem: uv
+    directory: /tools/layout
+    schedule:
+      interval: weekly

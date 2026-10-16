@@ -5,8 +5,12 @@
   "type": "module",
   "description": "A map of the OEIS.",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "wrangler dev",
+    "fixture": "node scripts/fixture-data.ts dist/data && node scripts/search-sql.ts --fixture dist/fixture.sql && wrangler d1 migrations apply sequence-atlas --local && wrangler d1 execute sequence-atlas --local --file dist/fixture.sql",
     "dev:web": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json",

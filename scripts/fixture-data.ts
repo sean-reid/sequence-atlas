@@ -124,13 +124,13 @@ function addShard(kind: string, name: string, doc: unknown): void {
   pack.parts.push(body);
   pack.offset += body.length;
 }
-for (let start = 1; start <= COUNT; start += 100) {
-  const name = String(Math.floor(start / 100)).padStart(5, "0");
+for (let start = 0; start <= COUNT; start += 100) {
+  const name = String(start / 100).padStart(5, "0");
   const baseDoc: Record<string, unknown> = {};
   const near: Record<string, Record<string, unknown>> = Object.fromEntries(
     FAMILIES.map((f) => [f, {}]),
   );
-  for (let n = start; n < start + 100 && n <= COUNT; n++) {
+  for (let n = Math.max(1, start); n < start + 100 && n <= COUNT; n++) {
     const id = formatANumber(n);
     const c = (n - 1) % 3;
     baseDoc[id] = {
