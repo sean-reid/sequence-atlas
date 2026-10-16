@@ -21,7 +21,14 @@ const TYPES: Record<string, string> = {
 // names the current version and is rechecked every five minutes.
 async function serveData(request: Request, env: Env, key: string): Promise<Response> {
   const object = await env.DATA.get(key);
-  if (!object) return env.ASSETS.fetch(request);
+  if (!object) {
+    // Local development serves the data directory from the asset store;
+    // the SPA fallback page is not data.
+    const asset = await env.ASSETS.fetch(request);
+    const type = asset.headers.get("content-type") ?? "";
+    const found = asset.status === 304 || (asset.ok && !type.startsWith("text/html"));
+    return found ? asset : json({ error: "not found" }, 404);
+  }
   const ext = key.split(".").pop() ?? "";
   const headers = new Headers({
     "content-type": TYPES[ext] ?? "application/octet-stream",
@@ -40,7 +47,7 @@ export default {
     if (pathname.startsWith("/api/")) return json({ error: "not found" }, 404);
     if (pathname.startsWith("/data/") && request.method === "GET") {
       const key = decodeURIComponent(pathname.slice("/data/".length));
-      if (!key || key.includes("..")) return json({ error: "not found" }, 404);
+      if (!key) return json({ error: "not found" }, 404);
       return serveData(request, env, key);
     }
     return env.ASSETS.fetch(request);
