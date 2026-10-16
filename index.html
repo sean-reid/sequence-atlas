@@ -51,6 +51,14 @@
         <button type="button" data-family="recur">Recurrence</button>
         <button type="button" data-family="graph">References</button>
       </nav>
+      <nav class="colours" aria-label="Colour points by">
+        <span class="colours-label">Colour</span>
+        <button type="button" class="on" data-colour="cluster">Island</button>
+        <button type="button" data-colour="growth">Growth</button>
+        <button type="button" data-colour="order">Recurrence order</button>
+        <button type="button" data-colour="keyword">Keyword</button>
+      </nav>
+      <ul class="legend" id="legend" hidden></ul>
     </header>
 
     <div class="tools">
@@ -65,19 +73,9 @@
         />
         <ol class="results" id="results" hidden></ol>
       </form>
-      <label class="colour">
-        <span class="visually-hidden">Colour points by</span>
-        <select id="colour">
-          <option value="cluster">Colour: cluster</option>
-          <option value="growth">Colour: growth class</option>
-          <option value="order">Colour: recurrence order</option>
-          <option value="keyword">Colour: keyword</option>
-        </select>
-      </label>
+
       <button type="button" id="theme" class="theme">Light</button>
     </div>
-
-    <ul class="legend" id="legend" hidden></ul>
 
     <aside class="panel" id="panel" aria-label="Selected sequence" hidden>
       <header class="panel-head">

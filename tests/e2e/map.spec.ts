@@ -80,11 +80,11 @@ test("the colour variable recolours the map, shows a legend, and survives a relo
   await page.goto("/");
   await expect(page.locator("body[data-ready]")).toBeVisible();
   await expect(page.locator("#legend")).toBeHidden();
-  await page.selectOption("#colour", "growth");
+  await page.locator(".colours button", { hasText: "Growth" }).click();
   await expect(page).toHaveURL(/c=growth/);
   await expect(page.locator("#legend li")).toHaveCount(8);
   await page.reload();
   await expect(page.locator("body[data-ready]")).toBeVisible();
-  await expect(page.locator("#colour")).toHaveValue("growth");
+  await expect(page.locator(".colours button.on")).toHaveText("Growth");
   await page.screenshot({ path: info.outputPath("growth-colour.png") });
 });

@@ -19,7 +19,7 @@ const canvas = document.getElementById("map") as HTMLCanvasElement;
 const labelsBox = document.getElementById("labels") as HTMLDivElement;
 const hoverBox = document.getElementById("hover") as HTMLDivElement;
 const themeButton = document.getElementById("theme") as HTMLButtonElement;
-const colourSelect = document.getElementById("colour") as HTMLSelectElement;
+const colourButtons = [...document.querySelectorAll<HTMLButtonElement>(".colours button")];
 const legendBox = document.getElementById("legend") as HTMLUListElement;
 const metricButtons = [...document.querySelectorAll<HTMLButtonElement>(".metrics button")];
 
@@ -66,7 +66,7 @@ function applyPalette(): void {
     }),
   );
   legendBox.hidden = current.legend.length === 0;
-  legendBox.classList.toggle("beside-panel", !document.getElementById("panel")!.hidden);
+  for (const b of colourButtons) b.classList.toggle("on", b.dataset.colour === colour);
   themeButton.textContent = renderer.dark ? "Light" : "Dark";
   themeButton.setAttribute("aria-label", renderer.dark ? "Switch to light" : "Switch to dark");
 }
@@ -83,7 +83,7 @@ function schedule(): void {
 }
 
 function chromeRects(): [number, number, number, number][] {
-  return [...document.querySelectorAll<HTMLElement>(".top, .tools, .panel, .foot")]
+  return [...document.querySelectorAll<HTMLElement>(".top, .tools, .panel, .foot, .legend")]
     .filter((e) => e.checkVisibility())
     .map((e) => {
       const r = e.getBoundingClientRect();
@@ -168,9 +168,7 @@ async function select(number: number | null, push: boolean, centre = false): Pro
   renderer.selected = selectedIndex;
   if (selectedIndex < 0 || number === null) {
     panel.hide();
-    legendBox.classList.remove("beside-panel");
   } else {
-    legendBox.classList.add("beside-panel");
     if (centre) renderer.centreOn(selectedIndex, Math.max(renderer.view.scale, 14));
     void panel.show(number, route.family, familyData, selectedIndex);
   }
@@ -208,11 +206,17 @@ for (const b of metricButtons) {
 }
 
 async function applyColour(): Promise<void> {
+  if (colour !== "cluster") {
+    try {
+      codes ??= await data.getColours();
+    } catch {
+      colour = "cluster";
+    }
+  }
   applyPalette();
-  if (colour === "cluster") {
+  if (colour === "cluster" || !codes) {
     renderer.colourByCodes(null);
   } else {
-    codes ??= await data.getColours();
     const style = getComputedStyle(document.documentElement);
     const current = scheme(colour, (n) => style.getPropertyValue(n).trim());
     const slots = new Uint8Array(numbers.length);
@@ -222,13 +226,15 @@ async function applyColour(): Promise<void> {
     renderer.colourByCodes(slots);
   }
   schedule();
+  scheduleHash();
 }
 
-colourSelect.addEventListener("change", () => {
-  colour = colourSelect.value as Colour;
-  void applyColour();
-  scheduleHash();
-});
+for (const b of colourButtons) {
+  b.addEventListener("click", () => {
+    colour = b.dataset.colour as Colour;
+    void applyColour();
+  });
+}
 
 themeButton.addEventListener("click", () => {
   const next = renderer.dark ? "light" : "dark";
@@ -339,13 +345,20 @@ addEventListener("popstate", () => {
   void showFamily(route.family, false).then(() => select(route.number, false));
 });
 
+// A module script can run before the stylesheet has arrived on a cold cache,
+// which would leave the palette empty and the canvas at its default size.
+async function stylesheetReady(): Promise<void> {
+  while (!getComputedStyle(document.documentElement).getPropertyValue("--c1").trim()) {
+    await new Promise((r) => requestAnimationFrame(r));
+  }
+}
+
 async function start(): Promise<void> {
+  await stylesheetReady();
+  renderer.resize();
   applyPalette();
   const view = parseHash(location.hash);
-  if (view.colour) {
-    colour = view.colour;
-    colourSelect.value = colour;
-  }
+  if (view.colour) colour = view.colour;
   numbers = await data.getNumbers();
   await showFamily(route.family, false);
   if (colour !== "cluster") await applyColour();
