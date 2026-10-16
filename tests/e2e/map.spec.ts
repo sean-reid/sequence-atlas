@@ -71,6 +71,8 @@ test("search lists matches and picking one selects it", async ({ page }) => {
   await expect(page.locator("#p-number")).toHaveText("A000045");
   await page.fill("#q", "zzz");
   await expect(page.locator("#results .note")).toHaveText("Nothing matches.");
+});
+
 test("the colour variable recolours the map, shows a legend, and survives a reload", async ({
   page,
 }, info) => {
