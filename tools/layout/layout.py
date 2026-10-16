@@ -314,9 +314,10 @@ def tokens_for(name, kws):
 
 def pick_label(scored):
     """Highest scoring tokens up to LABEL_WORDS words. A bigram is eligible when
-    it scores at least the best single token, and on a tie it comes first."""
+    it scores at least the best single token; ties go to the bigram, then to
+    the alphabetically first text, so the label does not depend on set order."""
     best_single = max((s for s, t in scored if " " not in t), default=-np.inf)
-    scored = sorted(scored, key=lambda st: (st[0], " " in st[1]), reverse=True)
+    scored = sorted(scored, key=lambda st: (-st[0], " " not in st[1], st[1]))
     words, out = set(), []
     for score, tok in scored:
         parts = tok.split()

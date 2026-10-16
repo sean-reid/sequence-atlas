@@ -77,9 +77,14 @@ def test_shard_naming_and_grouping(tmp_path):
 
 
 def test_label_prefers_bigram_over_its_tokens():
-    names = ["twin primes below n"] * 8 + ["primes dividing n"] * 6 + ["twin towers"] * 6 + ["number of primes"] * 5
+    names = ["twin primes below n"] * 5 + ["twin primes above n"] * 3 + ["primes dividing n"] * 6 + ["twin towers"] * 6 + ["number of primes"] * 5
     labels = np.array([0] * 8 + [-1] * 17)
     assert layout.label_clusters(labels, names, [[]] * len(names)) == {0: ["twin primes", "below"]}
+
+
+def test_label_ties_are_deterministic():
+    scored = [(1.0, "zeta"), (1.0, "alpha"), (1.0, "beta gamma"), (1.0, "alpha beta")]
+    assert layout.pick_label(scored) == ["alpha beta", "zeta"]
 
 
 def test_label_tokens_skip_stop_words_and_keep_keywords():
