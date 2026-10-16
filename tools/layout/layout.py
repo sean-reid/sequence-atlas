@@ -1,12 +1,18 @@
 """Turn the atlas feature matrix into layouts, clusters, labels, and neighbours.
 
-usage: uv run layout.py <features-dir> <out-dir> [--families a,b,c] [--sample N] [--epochs N]
+usage:
+  uv run layout.py embed <features-dir> <out-dir> [--families a,b,c] [--sample N] [--epochs N]
+  uv run layout.py shards <features-dir> <out-dir> --snapshot <date>
 
-Embeddings are cached as .npy under the out dir so clustering and labelling can
-be rerun without repeating UMAP.
+embed runs per family and caches the neighbour graph and embedding as .npz and
+.npy under the out dir, so clustering and labelling can be rerun without
+repeating UMAP. shards reads every family's neighbour graph from the out dir
+and writes the per-sequence files the site fetches, with manifest.json
+recording the count, the families, and the OEIS dump date given as --snapshot.
 """
 
 import csv
+import gzip
 import json
 import re
 import struct
@@ -14,6 +20,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import scipy.sparse as sp
@@ -34,7 +41,10 @@ a an the of for and or with in to on by at is are as that which whose where from
 than not no if all one two such its this be when then also each any other over under
 number numbers sequence sequences term terms integer integers n k m x y z read rows row
 expansion coefficients coefficient function triangle array table partial sums sum
+satisfies exists form smallest least only more look taken consisting having gives given
+equal equals exactly first using whose into such
 """.split())
+LABEL_WORDS = 3
 TOKEN = re.compile(r"[a-z][a-z'-]{2,}")
 
 
@@ -42,7 +52,18 @@ def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def load(features_dir, sample):
+class Data(NamedTuple):
+    X: np.ndarray
+    cols: list
+    numbers: np.ndarray
+    names: list
+    keywords: list
+    terms: list
+    offsets: list
+    xrefs: np.ndarray
+
+
+def load(features_dir):
     cols = [tuple(line.rstrip("\n").split("\t")) for line in open(features_dir / "columns.tsv")]
     X = np.fromfile(features_dir / "features.f32", dtype=np.float32).reshape(-1, len(cols))
     meta = []
@@ -58,25 +79,23 @@ def load(features_dir, sample):
     offsets = [int(r[2]) for r in meta]
     assert len(numbers) == X.shape[0]
     xrefs = np.loadtxt(features_dir / "xrefs.tsv", dtype=np.uint32, delimiter="\t")
+    data = Data(X, cols, numbers, names, keywords, terms, offsets, xrefs)
     # Dead entries are errata and duplicates kept for the record, not sequences.
-    alive = np.array(["dead" not in k for k in keywords])
-    log(f"dropping {np.sum(~alive)} dead entries")
-    X = X[alive]
-    numbers = numbers[alive]
-    names = [n for n, a in zip(names, alive) if a]
-    keywords = [k for k, a in zip(keywords, alive) if a]
-    terms = [t for t, a in zip(terms, alive) if a]
-    offsets = [o for o, a in zip(offsets, alive) if a]
-    if sample and sample < len(numbers):
-        rng = np.random.default_rng(1)
-        keep = np.sort(rng.choice(len(numbers), sample, replace=False))
-        X = X[keep]
-        numbers = numbers[keep]
-        names = [names[i] for i in keep]
-        keywords = [keywords[i] for i in keep]
-        terms = [terms[i] for i in keep]
-        offsets = [offsets[i] for i in keep]
-    return X, cols, numbers, names, keywords, terms, offsets, xrefs
+    alive = np.flatnonzero(["dead" not in k for k in keywords])
+    log(f"dropping {len(numbers) - len(alive)} dead entries")
+    return take(data, alive)
+
+
+def take(data, keep):
+    keep = np.asarray(keep)
+    return data._replace(
+        X=data.X[keep],
+        numbers=data.numbers[keep],
+        names=[data.names[i] for i in keep],
+        keywords=[data.keywords[i] for i in keep],
+        terms=[data.terms[i] for i in keep],
+        offsets=[data.offsets[i] for i in keep],
+    )
 
 
 def standardise(M):
@@ -130,6 +149,72 @@ def graph_features(numbers, keywords, xrefs):
             if k in kwi:
                 K[i, kwi[k]] = 1.0
     return np.hstack([spec.astype(np.float32), K * 1.5, np.log1p(deg)[:, None].astype(np.float32)])
+
+
+def needs_graph(families):
+    return any(f in ("graph", "all") for f in families)
+
+
+PHRASES = {
+    "g_log_last": "last term size",
+    "g_log_max": "largest term size",
+    "g_poly_slope": "polynomial degree",
+    "g_poly_resid": "polynomial fit error",
+    "g_exp_slope": "exponential rate",
+    "g_exp_resid": "exponential fit error",
+    "g_fact_slope": "factorial rate",
+    "g_fact_resid": "factorial fit error",
+    "g_ratio_last": "last term ratio",
+    "g_ratio_trend": "ratio trend",
+    "g_frac_neg": "negative terms",
+    "g_frac_zero": "zero terms",
+    "g_sign_changes": "sign changes",
+    "g_frac_nondecreasing": "nondecreasing steps",
+    "g_frac_increasing": "increasing steps",
+    "g_frac_one": "terms equal one",
+    "g_frac_small": "single digit terms",
+    "g_log_first": "first term size",
+    "g_curvature": "growth curvature",
+    "a_entropy_mod2": "parity balance",
+    "a_top_share_mod2": "parity bias",
+    "a_period_mod2": "parity period",
+    "a_frac_prime": "prime terms",
+    "a_frac_distinct": "distinct terms",
+    "a_frac_square": "square terms",
+    "a_frac_pow2": "powers of two",
+    "a_gcd_log": "common divisor",
+    "a_frac_even": "even terms",
+    "a_parity_run": "longest parity run",
+    "a_frac_adjacent_equal": "equal adjacent terms",
+    "a_frac_coprime_adjacent": "coprime adjacent terms",
+    "a_multiplicative": "multiplicativity",
+    "a_digit_sum_mean": "mean digit sum",
+    "r_order": "recurrence order",
+    "r_found": "linear recurrence",
+    "r_diff_degree": "difference degree",
+    "r_poly": "polynomial",
+    "r_diff_ratio": "difference size",
+    "r_diff2_ratio": "second difference size",
+    "r_period": "period",
+    "r_periodic": "periodic",
+    "r_eventually_constant": "eventually constant",
+    "degree": "number of cross references",
+}
+
+
+def feature_names(families, cols):
+    return {f: [{"name": c, "phrase": phrase(c)} for c in family_columns(f, cols)] for f in families}
+
+
+def phrase(column):
+    if column in PHRASES:
+        return PHRASES[column]
+    if column.startswith("spec"):
+        return "cross-reference community"
+    if column.startswith("kw_"):
+        return f"keyword {column[3:]}"
+    kind, _, modulus = column.partition("_mod")
+    return {"a_entropy": "balance", "a_top_share": "bias", "a_period": "period"}[kind] + f" mod {modulus}"
 
 
 def family_columns(family, cols):
@@ -205,7 +290,8 @@ def cluster(Y):
     rng = np.random.default_rng(7)
     pick = np.sort(rng.choice(n, min(n, CLUSTER_SAMPLE), replace=False))
     size = max(50, len(pick) // 1500)
-    sub = HDBSCAN(min_cluster_size=size, min_samples=10, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y[pick])
+    cap = len(pick) // 20
+    sub = HDBSCAN(min_cluster_size=size, min_samples=10, max_cluster_size=cap, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y[pick])
     labels = np.full(n, -1, dtype=np.int64)
     labels[pick] = sub
     rest = np.setdiff1d(np.arange(n), pick)
@@ -213,14 +299,37 @@ def cluster(Y):
         labels[rest] = KNeighborsClassifier(n_neighbors=7).fit(Y[pick], sub).predict(Y[rest])
     k = labels.max() + 1
     noise = np.mean(labels < 0)
-    log(f"hdbscan: {k} clusters, {noise:.1%} noise, min size {size}, sample {len(pick)}, in {time.time() - t:.0f}s")
+    largest = np.bincount(labels[labels >= 0]).max() if k else 0
+    log(f"hdbscan: {k} clusters, {noise:.1%} noise, largest {largest}, min size {size}, cap {cap}, sample {len(pick)}, in {time.time() - t:.0f}s")
     return labels
 
 
 def tokens_for(name, kws):
-    toks = {t for t in TOKEN.findall(name.lower()) if t not in STOP}
+    words = TOKEN.findall(name.lower())
+    toks = {t for t in words if t not in STOP}
+    toks |= {f"{a} {b}" for a, b in zip(words, words[1:]) if a not in STOP and b not in STOP}
     toks |= {f"kw:{k}" for k in kws if k not in ("nonn", "changed", "new", "easy", "sign")}
     return toks
+
+
+def pick_label(scored):
+    """Highest scoring tokens up to LABEL_WORDS words. A bigram is eligible when
+    it scores at least the best single token; ties go to the bigram, then to
+    the alphabetically first text, so the label does not depend on set order."""
+    best_single = max((s for s, t in scored if " " not in t), default=-np.inf)
+    scored = sorted(scored, key=lambda st: (-st[0], " " not in st[1], st[1]))
+    words, out = set(), []
+    for score, tok in scored:
+        parts = tok.split()
+        if len(parts) > 1 and score < best_single:
+            continue
+        if words & set(parts) or len(words) + len(parts) > LABEL_WORDS:
+            continue
+        out.append(tok)
+        words |= set(parts)
+        if len(words) == LABEL_WORDS:
+            break
+    return out
 
 
 def label_clusters(labels, names, keywords):
@@ -246,12 +355,8 @@ def label_clusters(labels, names, keywords):
             p_out = (c_out + 0.5) / (n_out + 1)
             lift = np.log(p_in / p_out)
             scored.append((lift * np.sqrt(c_in / n_in), tok))
-        scored.sort(reverse=True)
-        out[c] = [t.removeprefix("kw:") for _, t in scored[:3]]
+        out[c] = [t.removeprefix("kw:") for t in pick_label(scored)]
     return out
-
-
-SHARD_SIZE = 100
 
 
 def explain(Z, nn, limit=2):
@@ -268,28 +373,78 @@ def explain(Z, nn, limit=2):
     return out
 
 
-def write_shards(out, numbers, names, terms, keywords, offsets, families, nn_by_family, why_by_family, columns):
-    shards = out / "shards"
-    shards.mkdir(exist_ok=True)
-    json.dump(columns, open(out / "columns.json", "w"))
+GROWTH_CLASSES = ["periodic", "linear", "quadratic", "cubic or quartic", "higher polynomial", "exponential", "factorial", "other"]
+# log10 slope per index of n^2 over 80 terms is 0.048; n^3 is 0.083.
+SLOW_EXP_SLOPE = 0.05
+FAST_EXP_SLOPE = 1.5
+# Ratio trend of Catalan is 0.009 and of Bell is 0.030.
+FACTORIAL_RATIO_TREND = 0.02
+MAX_ORDER = 12
+KEYWORD_GROUPS = [("core", 1), ("nice", 2), ("hard", 3), ("base", 4), ("mult", 5), ("tabl", 6), ("tabf", 6), ("cons", 7), ("easy", 8)]
+
+
+def growth_class(c):
+    periodic = (c["r_period"] > 0) | (c["r_eventually_constant"] > 0)
+    poly = c["r_poly"] > 0
+    # r_diff_degree counts differences taken, one more than the polynomial degree.
+    degree = np.where(poly, c["r_diff_degree"] - 1, np.rint(c["g_poly_slope"]))
+    by_degree = np.select([degree < 1, degree == 1, degree == 2, degree <= 4], [7, 1, 2, 3], 4)
+    slow = c["g_exp_slope"] < SLOW_EXP_SLOPE
+    resid = np.stack([c["g_poly_resid"], c["g_exp_resid"], c["g_fact_resid"]])
+    factorial = (c["g_ratio_trend"] > FACTORIAL_RATIO_TREND) | (resid.argmin(axis=0) == 2)
+    exponential = (c["g_exp_slope"] <= FAST_EXP_SLOPE) & (np.abs(c["g_ratio_trend"]) <= FACTORIAL_RATIO_TREND)
+    return np.select([periodic, poly | slow, factorial, exponential], [0, by_degree, 6, 5], 7)
+
+
+def keyword_group(kws):
+    return next((code for k, code in KEYWORD_GROUPS if k in kws), 0)
+
+
+def colour_codes(X, cols, keywords):
+    """Three bytes per sequence: growth class, recurrence order, keyword group."""
+    c = {name: X[:, i] for i, (_, name) in enumerate(cols)}
+    order = np.where(c["r_found"] > 0, np.minimum(c["r_order"], MAX_ORDER), 0)
+    group = [keyword_group(k) for k in keywords]
+    return np.stack([growth_class(c), order, group], axis=1).astype(np.uint8)
+
+
+def histogram(name, codes, labels=None):
+    counts = np.bincount(codes)
+    text = ", ".join(f"{labels[i] if labels else i}: {n}" for i, n in enumerate(counts))
+    log(f"{name}: {text}")
+
+
+SHARD_SIZE = 100
+NOISE = 65535
+
+
+def shard_key(number):
+    return f"A{number:06d}"
+
+
+def shard_file(number):
+    return f"{number // SHARD_SIZE:05d}.json"
+
+
+def shard_groups(numbers):
     groups = {}
     for i, n in enumerate(numbers):
-        groups.setdefault(int(n) // SHARD_SIZE, []).append(i)
-    total = 0
-    for g, members in groups.items():
-        doc = {}
-        for i in members:
-            entry = {"name": names[i], "terms": terms[i], "offset": offsets[i], "keywords": keywords[i], "near": {}}
-            for f in families:
-                rows = []
-                for j, why in zip(nn_by_family[f][i], why_by_family[f][i]):
-                    rows.append([int(numbers[j]), *[int(w) for w in why]])
-                entry["near"][f] = rows
-            doc[f"A{int(numbers[i]):06d}"] = entry
-        text = json.dumps(doc, separators=(",", ":"))
-        (shards / f"{g:05d}.json").write_text(text)
-        total += len(text)
-    log(f"shards: {len(groups)} files, {total / len(groups) / 1024:.1f} KB mean raw")
+        groups.setdefault(shard_file(int(n)), []).append(i)
+    return groups
+
+
+def write_shard_dir(path, numbers, groups, entry):
+    """One JSON object per shard, keyed by A-number, each value from entry(row).
+    Returns the mean raw and gzipped size in KB."""
+    path.mkdir(parents=True, exist_ok=True)
+    raw = packed = 0
+    for name, members in groups.items():
+        doc = {shard_key(int(numbers[i])): entry(i) for i in members}
+        text = json.dumps(doc, separators=(",", ":")).encode()
+        (path / name).write_bytes(text)
+        raw += len(text)
+        packed += len(gzip.compress(text, 6))
+    return raw / len(groups) / 1024, packed / len(groups) / 1024
 
 
 def write_layout(path, Y):
@@ -304,38 +459,20 @@ def write_layout(path, Y):
     return q
 
 
-def main():
-    args = sys.argv[1:]
-    features_dir = Path(args[0])
-    out = Path(args[1])
-    out.mkdir(parents=True, exist_ok=True)
-    families = FAMILIES
-    sample = 0
-    epochs = 200
-    i = 2
-    while i < len(args):
-        if args[i] == "--families":
-            families = args[i + 1].split(",")
-            i += 2
-        elif args[i] == "--sample":
-            sample = int(args[i + 1])
-            i += 2
-        elif args[i] == "--epochs":
-            epochs = int(args[i + 1])
-            i += 2
-        else:
-            raise SystemExit(__doc__)
-
+def run_embed(features_dir, out, families, sample, epochs):
     t0 = time.time()
-    X, cols, numbers, names, keywords, terms, offsets, xrefs = load(features_dir, sample)
+    data = load(features_dir)
+    if sample and sample < len(data.numbers):
+        rng = np.random.default_rng(1)
+        data = take(data, np.sort(rng.choice(len(data.numbers), sample, replace=False)))
+    X, cols, numbers, names, keywords = data.X, data.cols, data.numbers, data.names, data.keywords
     log(f"loaded {X.shape[0]} sequences, {X.shape[1]} features")
     numbers.tofile(out / "numbers.u32")
     with open(out / "names.txt", "w") as f:
         f.write("\n".join(names))
-    graph = graph_features(numbers, keywords, xrefs)
+    graph = graph_features(numbers, keywords, data.xrefs) if needs_graph(families) else None
 
     report = {"count": int(len(numbers)), "families": {}}
-    nn_by_family, why_by_family, columns_by_family = {}, {}, {}
     probes = [45, 40, 290, 108, 5132, 2, 796, 10, 142, 1006]
     index = {int(n): i for i, n in enumerate(numbers)}
     for family in families:
@@ -346,22 +483,18 @@ def main():
         labels = cluster(Y)
         label_text = label_clusters(labels, names, keywords)
         write_layout(out / f"{family}.layout.bin", Y)
-        np.where(labels < 0, 65535, labels).astype(np.uint16).tofile(out / f"{family}.cluster.u16")
+        np.where(labels < 0, NOISE, labels).astype(np.uint16).tofile(out / f"{family}.cluster.u16")
         clusters = []
         for c, toks in label_text.items():
             m = labels == c
             clusters.append({"id": int(c), "label": " ".join(toks), "size": int(m.sum()), "cx": float(Y[m, 0].mean()), "cy": float(Y[m, 1].mean())})
         clusters.sort(key=lambda c: -c["size"])
         json.dump(clusters, open(out / f"{family}.clusters.json", "w"))
-        nn = knn[0][:, 1:].astype(np.uint32)
-        nn.tofile(out / f"{family}.nn.u32")
-        nn_by_family[family] = nn
-        why_by_family[family] = explain(M, nn)
-        columns_by_family[family] = family_columns(family, cols)
+        nn = knn[0][:, 1:]
         sample_nn = {}
         for p in probes:
             if p in index:
-                sample_nn[f"A{p:06d}"] = [f"A{numbers[j]:06d} {names[j][:60]}" for j in nn[index[p], :6]]
+                sample_nn[shard_key(p)] = [f"{shard_key(int(numbers[j]))} {names[j][:60]}" for j in nn[index[p], :6]]
         report["families"][family] = {
             "dims": int(M.shape[1]),
             "clusters": len(clusters),
@@ -369,10 +502,99 @@ def main():
             "top_clusters": [f"{c['size']}: {c['label']}" for c in clusters[:25]],
             "neighbours": sample_nn,
         }
-    write_shards(out, numbers, names, terms, keywords, offsets, families, nn_by_family, why_by_family, columns_by_family)
     report["seconds"] = round(time.time() - t0)
     json.dump(report, open(out / f"report-{'-'.join(families)}.json", "w"), indent=1)
     log(f"done in {report['seconds']}s")
+
+
+def write_manifest(path, count, families, snapshot):
+    manifest = {"version": time.strftime("%Y%m%d"), "count": int(count), "families": list(families), "snapshot": snapshot}
+    json.dump(manifest, open(path, "w"))
+    return manifest
+
+
+def run_shards(features_dir, out, snapshot):
+    t0 = time.time()
+    numbers = np.fromfile(out / "numbers.u32", dtype=np.uint32)
+    data = load(features_dir)
+    index = {int(n): i for i, n in enumerate(data.numbers)}
+    data = take(data, [index[int(n)] for n in numbers])
+    families = [f for f in FAMILIES if (out / f"{f}.knn.npz").exists()]
+    log(f"{len(numbers)} sequences, families {', '.join(families)}")
+    graph = graph_features(numbers, data.keywords, data.xrefs) if needs_graph(families) else None
+    clusters = {}
+    for f in families:
+        path = out / f"{f}.cluster.u16"
+        if path.exists():
+            clusters[f] = np.fromfile(path, dtype=np.uint16)
+    json.dump(feature_names(families, data.cols), open(out / "features.json", "w"))
+    colour = colour_codes(data.X, data.cols, data.keywords)
+    colour.tofile(out / "colour.u8")
+    histogram("growth class", colour[:, 0], GROWTH_CLASSES)
+    histogram("recurrence order", colour[:, 1])
+    histogram("keyword group", colour[:, 2], ["none"] + [k for k, _ in KEYWORD_GROUPS if k != "tabf"])
+    groups = shard_groups(numbers)
+
+    def base(i):
+        return {
+            "name": data.names[i],
+            "terms": data.terms[i],
+            "offset": data.offsets[i],
+            "keywords": data.keywords[i],
+            "cluster": {f: None if c[i] == NOISE else int(c[i]) for f, c in clusters.items()},
+            "colour": colour[i].tolist(),
+        }
+
+    raw, packed = write_shard_dir(out / "shards" / "base", numbers, groups, base)
+    log(f"shards/base: {len(groups)} files, {raw:.1f} KB raw, {packed:.1f} KB gzipped")
+    for f in families:
+        M = family_matrix(f, data.X, data.cols, graph)
+        nn = np.load(out / f"{f}.knn.npz")["idx"][:, 1 : NEIGHBOURS + 1]
+        why = explain(M, nn)
+
+        def near(i):
+            return [[int(numbers[j]), int(a), int(b)] for j, (a, b) in zip(nn[i], why[i])]
+
+        raw, packed = write_shard_dir(out / "shards" / f, numbers, groups, near)
+        log(f"shards/{f}: {len(groups)} files, {raw:.1f} KB raw, {packed:.1f} KB gzipped")
+    log(f"manifest: {write_manifest(out / 'manifest.json', len(numbers), families, snapshot)}")
+    log(f"done in {time.time() - t0:.0f}s")
+
+
+def main():
+    args = sys.argv[1:]
+    if len(args) < 3 or args[0] not in ("embed", "shards"):
+        raise SystemExit(__doc__)
+    mode = args[0]
+    features_dir = Path(args[1])
+    out = Path(args[2])
+    out.mkdir(parents=True, exist_ok=True)
+    families = FAMILIES
+    sample = 0
+    epochs = 200
+    snapshot = None
+    i = 3
+    while i < len(args):
+        if args[i] == "--families" and mode == "embed":
+            families = args[i + 1].split(",")
+            i += 2
+        elif args[i] == "--sample" and mode == "embed":
+            sample = int(args[i + 1])
+            i += 2
+        elif args[i] == "--epochs" and mode == "embed":
+            epochs = int(args[i + 1])
+            i += 2
+        elif args[i] == "--snapshot" and mode == "shards":
+            snapshot = args[i + 1]
+            i += 2
+        else:
+            raise SystemExit(__doc__)
+    if mode == "embed":
+        run_embed(features_dir, out, families, sample, epochs)
+    elif snapshot:
+        run_shards(features_dir, out, snapshot)
+    else:
+        raise SystemExit(__doc__)
 
 
 if __name__ == "__main__":

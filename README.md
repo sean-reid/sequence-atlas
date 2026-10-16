@@ -14,4 +14,4 @@ npm run test:e2e       # Playwright against a built bundle
 
 ## How it runs
 
-One Cloudflare Worker serves the static site and `/api/health`. Everything the map shows is computed ahead of time by the tools under `tools/` and uploaded as static files.
+One Cloudflare Worker serves the static site and `/api/health`. Everything the map shows is computed ahead of time by the tools under `tools/` and uploaded as static files. The Rust tool extracts the features, then `tools/layout` runs in two steps: `uv run layout.py embed` once per family writes the layout, clusters, and neighbour graph, and `uv run layout.py shards` once writes the per-sequence files the site fetches.

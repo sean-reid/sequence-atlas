@@ -76,3 +76,5 @@ jobs:
         working-directory: tools/layout
       - run: uv run python -c "import layout"
         working-directory: tools/layout
+      - run: uv run pytest
+        working-directory: tools/layout
