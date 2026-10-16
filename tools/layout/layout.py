@@ -54,8 +54,19 @@ def load(features_dir, sample):
     numbers = np.array([int(r[0]) for r in meta], dtype=np.uint32)
     names = [r[4] for r in meta]
     keywords = [r[3].split(",") if r[3] else [] for r in meta]
+    terms = [r[5] if len(r) > 5 else "" for r in meta]
+    offsets = [int(r[2]) for r in meta]
     assert len(numbers) == X.shape[0]
     xrefs = np.loadtxt(features_dir / "xrefs.tsv", dtype=np.uint32, delimiter="\t")
+    # Dead entries are errata and duplicates kept for the record, not sequences.
+    alive = np.array(["dead" not in k for k in keywords])
+    log(f"dropping {np.sum(~alive)} dead entries")
+    X = X[alive]
+    numbers = numbers[alive]
+    names = [n for n, a in zip(names, alive) if a]
+    keywords = [k for k, a in zip(keywords, alive) if a]
+    terms = [t for t, a in zip(terms, alive) if a]
+    offsets = [o for o, a in zip(offsets, alive) if a]
     if sample and sample < len(numbers):
         rng = np.random.default_rng(1)
         keep = np.sort(rng.choice(len(numbers), sample, replace=False))
@@ -63,7 +74,9 @@ def load(features_dir, sample):
         numbers = numbers[keep]
         names = [names[i] for i in keep]
         keywords = [keywords[i] for i in keep]
-    return X, cols, numbers, names, keywords, xrefs
+        terms = [terms[i] for i in keep]
+        offsets = [offsets[i] for i in keep]
+    return X, cols, numbers, names, keywords, terms, offsets, xrefs
 
 
 def standardise(M):
@@ -119,6 +132,16 @@ def graph_features(numbers, keywords, xrefs):
     return np.hstack([spec.astype(np.float32), K * 1.5, np.log1p(deg)[:, None].astype(np.float32)])
 
 
+def family_columns(family, cols):
+    graph_cols = [f"spec{i}" for i in range(SPECTRAL_DIMS)] + [f"kw_{k}" for k in KEYWORDS] + ["degree"]
+    if family == "graph":
+        return graph_cols
+    numeric = [c[1] for c in cols if c[0] in ("growth", "arith", "recur")]
+    if family == "all":
+        return numeric + graph_cols
+    return [c[1] for c in cols if c[0] == family]
+
+
 def family_matrix(family, X, cols, graph):
     if family == "graph":
         return graph
@@ -167,15 +190,30 @@ def embed(M, knn, cache, epochs):
     return Y
 
 
+CLUSTER_SAMPLE = 120_000
+
+
 def cluster(Y):
+    """HDBSCAN on a subsample of the layout, the rest assigned to the nearest
+    labelled points. Density clusters in two dimensions barely change past
+    this sample size and the full run takes many times longer."""
     from sklearn.cluster import HDBSCAN
+    from sklearn.neighbors import KNeighborsClassifier
 
     t = time.time()
-    size = max(50, len(Y) // 1500)
-    labels = HDBSCAN(min_cluster_size=size, min_samples=10, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y)
+    n = len(Y)
+    rng = np.random.default_rng(7)
+    pick = np.sort(rng.choice(n, min(n, CLUSTER_SAMPLE), replace=False))
+    size = max(50, len(pick) // 1500)
+    sub = HDBSCAN(min_cluster_size=size, min_samples=10, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y[pick])
+    labels = np.full(n, -1, dtype=np.int64)
+    labels[pick] = sub
+    rest = np.setdiff1d(np.arange(n), pick)
+    if len(rest):
+        labels[rest] = KNeighborsClassifier(n_neighbors=7).fit(Y[pick], sub).predict(Y[rest])
     k = labels.max() + 1
     noise = np.mean(labels < 0)
-    log(f"hdbscan: {k} clusters, {noise:.1%} noise, min size {size}, in {time.time() - t:.0f}s")
+    log(f"hdbscan: {k} clusters, {noise:.1%} noise, min size {size}, sample {len(pick)}, in {time.time() - t:.0f}s")
     return labels
 
 
@@ -213,6 +251,47 @@ def label_clusters(labels, names, keywords):
     return out
 
 
+SHARD_SIZE = 100
+
+
+def explain(Z, nn, limit=2):
+    """For each neighbour, the columns where both points are alike and both sit
+    away from the corpus mean: high shared magnitude, low difference."""
+    out = np.zeros((nn.shape[0], nn.shape[1], limit), dtype=np.uint8)
+    for start in range(0, len(Z), 20000):
+        zi = Z[start : start + 20000]
+        zj = Z[nn[start : start + 20000]]
+        shared = np.abs(zi[:, None, :] + zj) / 2
+        gap = np.abs(zi[:, None, :] - zj)
+        score = shared - 2 * gap
+        out[start : start + 20000] = np.argsort(-score, axis=2)[:, :, :limit]
+    return out
+
+
+def write_shards(out, numbers, names, terms, keywords, offsets, families, nn_by_family, why_by_family, columns):
+    shards = out / "shards"
+    shards.mkdir(exist_ok=True)
+    json.dump(columns, open(out / "columns.json", "w"))
+    groups = {}
+    for i, n in enumerate(numbers):
+        groups.setdefault(int(n) // SHARD_SIZE, []).append(i)
+    total = 0
+    for g, members in groups.items():
+        doc = {}
+        for i in members:
+            entry = {"name": names[i], "terms": terms[i], "offset": offsets[i], "keywords": keywords[i], "near": {}}
+            for f in families:
+                rows = []
+                for j, why in zip(nn_by_family[f][i], why_by_family[f][i]):
+                    rows.append([int(numbers[j]), *[int(w) for w in why]])
+                entry["near"][f] = rows
+            doc[f"A{int(numbers[i]):06d}"] = entry
+        text = json.dumps(doc, separators=(",", ":"))
+        (shards / f"{g:05d}.json").write_text(text)
+        total += len(text)
+    log(f"shards: {len(groups)} files, {total / len(groups) / 1024:.1f} KB mean raw")
+
+
 def write_layout(path, Y):
     lo = Y.min(axis=0)
     hi = Y.max(axis=0)
@@ -248,7 +327,7 @@ def main():
             raise SystemExit(__doc__)
 
     t0 = time.time()
-    X, cols, numbers, names, keywords, xrefs = load(features_dir, sample)
+    X, cols, numbers, names, keywords, terms, offsets, xrefs = load(features_dir, sample)
     log(f"loaded {X.shape[0]} sequences, {X.shape[1]} features")
     numbers.tofile(out / "numbers.u32")
     with open(out / "names.txt", "w") as f:
@@ -256,6 +335,7 @@ def main():
     graph = graph_features(numbers, keywords, xrefs)
 
     report = {"count": int(len(numbers)), "families": {}}
+    nn_by_family, why_by_family, columns_by_family = {}, {}, {}
     probes = [45, 40, 290, 108, 5132, 2, 796, 10, 142, 1006]
     index = {int(n): i for i, n in enumerate(numbers)}
     for family in families:
@@ -275,6 +355,9 @@ def main():
         json.dump(clusters, open(out / f"{family}.clusters.json", "w"))
         nn = knn[0][:, 1:].astype(np.uint32)
         nn.tofile(out / f"{family}.nn.u32")
+        nn_by_family[family] = nn
+        why_by_family[family] = explain(M, nn)
+        columns_by_family[family] = family_columns(family, cols)
         sample_nn = {}
         for p in probes:
             if p in index:
@@ -286,6 +369,7 @@ def main():
             "top_clusters": [f"{c['size']}: {c['label']}" for c in clusters[:25]],
             "neighbours": sample_nn,
         }
+    write_shards(out, numbers, names, terms, keywords, offsets, families, nn_by_family, why_by_family, columns_by_family)
     report["seconds"] = round(time.time() - t0)
     json.dump(report, open(out / f"report-{'-'.join(families)}.json", "w"), indent=1)
     log(f"done in {report['seconds']}s")
