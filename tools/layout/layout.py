@@ -151,6 +151,68 @@ def needs_graph(families):
     return any(f in ("graph", "all") for f in families)
 
 
+PHRASES = {
+    "g_log_last": "last term size",
+    "g_log_max": "largest term size",
+    "g_poly_slope": "polynomial degree",
+    "g_poly_resid": "polynomial fit error",
+    "g_exp_slope": "exponential rate",
+    "g_exp_resid": "exponential fit error",
+    "g_fact_slope": "factorial rate",
+    "g_fact_resid": "factorial fit error",
+    "g_ratio_last": "last term ratio",
+    "g_ratio_trend": "ratio trend",
+    "g_frac_neg": "negative terms",
+    "g_frac_zero": "zero terms",
+    "g_sign_changes": "sign changes",
+    "g_frac_nondecreasing": "nondecreasing steps",
+    "g_frac_increasing": "increasing steps",
+    "g_frac_one": "terms equal one",
+    "g_frac_small": "single digit terms",
+    "g_log_first": "first term size",
+    "g_curvature": "growth curvature",
+    "a_entropy_mod2": "parity balance",
+    "a_top_share_mod2": "parity bias",
+    "a_period_mod2": "parity period",
+    "a_frac_prime": "prime terms",
+    "a_frac_distinct": "distinct terms",
+    "a_frac_square": "square terms",
+    "a_frac_pow2": "powers of two",
+    "a_gcd_log": "common divisor",
+    "a_frac_even": "even terms",
+    "a_parity_run": "longest parity run",
+    "a_frac_adjacent_equal": "equal adjacent terms",
+    "a_frac_coprime_adjacent": "coprime adjacent terms",
+    "a_multiplicative": "multiplicativity",
+    "a_digit_sum_mean": "mean digit sum",
+    "r_order": "recurrence order",
+    "r_found": "linear recurrence",
+    "r_diff_degree": "difference degree",
+    "r_poly": "polynomial",
+    "r_diff_ratio": "difference size",
+    "r_diff2_ratio": "second difference size",
+    "r_period": "period",
+    "r_periodic": "periodic",
+    "r_eventually_constant": "eventually constant",
+    "degree": "number of cross references",
+}
+
+
+def feature_names(families, cols):
+    return {f: [{"name": c, "phrase": phrase(c)} for c in family_columns(f, cols)] for f in families}
+
+
+def phrase(column):
+    if column in PHRASES:
+        return PHRASES[column]
+    if column.startswith("spec"):
+        return "cross-reference community"
+    if column.startswith("kw_"):
+        return f"keyword {column[3:]}"
+    kind, _, modulus = column.partition("_mod")
+    return {"a_entropy": "balance", "a_top_share": "bias", "a_period": "period"}[kind] + f" mod {modulus}"
+
+
 def family_columns(family, cols):
     graph_cols = [f"spec{i}" for i in range(SPECTRAL_DIMS)] + [f"kw_{k}" for k in KEYWORDS] + ["degree"]
     if family == "graph":
@@ -391,7 +453,7 @@ def run_shards(features_dir, out):
         path = out / f"{f}.cluster.u16"
         if path.exists():
             clusters[f] = np.fromfile(path, dtype=np.uint16)
-    json.dump({f: family_columns(f, data.cols) for f in families}, open(out / "columns.json", "w"))
+    json.dump(feature_names(families, data.cols), open(out / "features.json", "w"))
     groups = shard_groups(numbers)
 
     def base(i):
