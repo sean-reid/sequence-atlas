@@ -106,10 +106,19 @@ function chromeRects(): [number, number, number, number][] {
 
 function placeLabels(): void {
   const current = renderer.family;
-  if (!current || renderer.animating || drag?.moved) {
-    if (!current || renderer.animating) labelsBox.replaceChildren();
+  if (!current || renderer.animating || pinch) {
+    labelsBox.replaceChildren();
     return;
   }
+  // While a drag is in progress the labels ride along as one layer; they are
+  // placed again from scratch when the pointer lifts.
+  if (drag?.moved) {
+    const dx = ((renderer.view.x - drag.vx) / 2) * renderer.width;
+    const dy = (-(renderer.view.y - drag.vy) / 2) * renderer.height;
+    labelsBox.style.transform = `translate(${dx}px, ${dy}px)`;
+    return;
+  }
+  labelsBox.style.transform = "";
   const w = renderer.width;
   const h = renderer.height;
   const placed = chromeRects();
@@ -378,12 +387,14 @@ function endPointer(e: PointerEvent): void {
     }
   }
   if (pointers.size === 0) drag = null;
+  schedule();
 }
 canvas.addEventListener("pointerup", endPointer);
 canvas.addEventListener("pointercancel", (e) => {
   pointers.delete(e.pointerId);
   drag = null;
   pinch = null;
+  schedule();
 });
 canvas.addEventListener("pointerleave", () => (hoverBox.hidden = true));
 

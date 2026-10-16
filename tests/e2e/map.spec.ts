@@ -99,3 +99,22 @@ test("the color variable recolors the map, shows a legend, and survives a reload
   await expect(page.locator(".colors button.on")).toHaveText("Growth");
   await page.screenshot({ path: info.outputPath("growth-color.png") });
 });
+
+test("labels follow a drag and settle when it ends", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("body[data-ready]")).toBeVisible();
+  const label = page.locator("#labels span").first();
+  await expect(label).toBeVisible();
+  const before = await label.boundingBox();
+  await page.mouse.move(150, 320);
+  await page.mouse.down();
+  await page.mouse.move(210, 360, { steps: 5 });
+  const during = await label.boundingBox();
+  expect(Math.round(during!.x - before!.x)).toBe(60);
+  expect(Math.round(during!.y - before!.y)).toBe(40);
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await label.boundingBox())!.x - before!.x, { timeout: 2000 })
+    .toBeGreaterThan(50);
+  await expect(page.locator("#labels")).toHaveAttribute("style", "");
+});
