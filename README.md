@@ -1,4 +1,4 @@
-# sequence-atlas
+# sequence atlas
 
 A map of the OEIS at [sequence-atlas.dwainosaur.com](https://sequence-atlas.dwainosaur.com). Every sequence with at least ten terms is one point, laid out so that sequences which are alike under one of five measures sit near each other: growth, arithmetic structure, linear recurrence, cross references, or all of them together. Switch the measure and the points move to their new places. Pick a point, or search by A-number, name, or a run of terms, to see the sequence, the island it sits in, and its twenty nearest neighbours with the features that put them close. Points can be coloured by island, growth class, recurrence order, or keyword.
 

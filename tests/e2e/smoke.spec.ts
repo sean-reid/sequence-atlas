@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 test("the front page loads the map", async ({ page }, info) => {
   await page.goto("/");
-  await expect(page).toHaveTitle("sequence-atlas");
-  await expect(page.locator("h1")).toHaveText("sequence-atlas");
+  await expect(page).toHaveTitle("sequence atlas");
+  await expect(page.locator("h1")).toHaveText("sequence atlas");
   await expect(page.locator("body[data-ready]")).toBeVisible();
   await expect(page.locator("#labels span").first()).toBeVisible();
   await page.screenshot({ path: info.outputPath("front.png") });
