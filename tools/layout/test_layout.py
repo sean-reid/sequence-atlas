@@ -1,3 +1,4 @@
+import gzip
 import json
 import struct
 
@@ -65,15 +66,18 @@ def test_recurrence_order_is_capped():
 
 
 def test_shard_naming_and_grouping(tmp_path):
+    numbers = np.array([1, 99, 100, 199, 250], dtype=np.uint32)
     assert layout.shard_key(45) == "A000045"
-    assert layout.shard_file(45) == "00000.json"
-    assert layout.shard_file(123456) == "01234.json"
-    numbers = np.array([45, 99, 100, 199, 200], dtype=np.uint32)
+    assert layout.shard_file(250) == "00002.json"
     groups = layout.shard_groups(numbers)
-    assert groups == {"00000.json": [0, 1], "00001.json": [2, 3], "00002.json": [4]}
-    layout.write_shard_dir(tmp_path / "base", numbers, groups, lambda i: int(numbers[i]) * 2)
-    assert sorted(p.name for p in (tmp_path / "base").iterdir()) == ["00000.json", "00001.json", "00002.json"]
-    assert json.loads((tmp_path / "base" / "00001.json").read_text()) == {"A000100": 200, "A000199": 398}
+    assert list(groups) == ["00000.json", "00001.json", "00002.json"]
+    layout.write_shard_pack(tmp_path / "base.pack", numbers, groups, lambda i: int(numbers[i]) * 2)
+    index = json.loads((tmp_path / "base.index.json").read_text())
+    assert list(index) == ["00000", "00001", "00002"]
+    pack = (tmp_path / "base.pack").read_bytes()
+    offset, length = index["00001"]
+    assert json.loads(gzip.decompress(pack[offset : offset + length])) == {"A000100": 200, "A000199": 398}
+    assert sum(length for _, length in index.values()) == len(pack)
 
 
 def test_label_prefers_bigram_over_its_tokens():

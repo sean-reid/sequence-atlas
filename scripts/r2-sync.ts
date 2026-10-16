@@ -20,7 +20,7 @@ if (!token || !account) {
 }
 const base = `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/objects/`;
 const headers = { authorization: `Bearer ${token}` };
-const CONCURRENCY = 24;
+const CONCURRENCY = 4;
 
 function walk(root: string): string[] {
   const out: string[] = [];
@@ -53,8 +53,10 @@ async function put(key: string, body: Buffer, type: string): Promise<void> {
       body: new Blob([Uint8Array.from(body)]),
     });
     if (res.ok) return;
-    if (attempt >= 4) throw new Error(`${key}: ${res.status} ${await res.text()}`);
-    await new Promise((r) => setTimeout(r, 1000 * attempt));
+    if (attempt >= 12) throw new Error(`${key}: ${res.status} ${await res.text()}`);
+    // The API allows about 1,200 requests per five minutes; back off and retry.
+    const wait = res.status === 429 ? 15_000 : 1000 * attempt;
+    await new Promise((r) => setTimeout(r, wait));
   }
 }
 

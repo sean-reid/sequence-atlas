@@ -437,18 +437,25 @@ def shard_groups(numbers):
     return groups
 
 
-def write_shard_dir(path, numbers, groups, entry):
-    """One JSON object per shard, keyed by A-number, each value from entry(row).
+def write_shard_pack(path, numbers, groups, entry):
+    """Every shard of one kind as a gzip member in a single pack file, with
+    <kind>.index.json mapping the shard name to its byte offset and length, so
+    one object per kind is uploaded and the Worker serves shards by range.
     Returns the mean raw and gzipped size in KB."""
-    path.mkdir(parents=True, exist_ok=True)
-    raw = packed = 0
-    for name, members in groups.items():
-        doc = {shard_key(int(numbers[i])): entry(i) for i in members}
-        text = json.dumps(doc, separators=(",", ":")).encode()
-        (path / name).write_bytes(text)
-        raw += len(text)
-        packed += len(gzip.compress(text, 6))
-    return raw / len(groups) / 1024, packed / len(groups) / 1024
+    path.parent.mkdir(parents=True, exist_ok=True)
+    index = {}
+    raw = offset = 0
+    with open(path, "wb") as pack:
+        for name, members in groups.items():
+            doc = {shard_key(int(numbers[i])): entry(i) for i in members}
+            text = json.dumps(doc, separators=(",", ":")).encode()
+            body = gzip.compress(text, 6, mtime=0)
+            pack.write(body)
+            index[name.removesuffix(".json")] = [offset, len(body)]
+            offset += len(body)
+            raw += len(text)
+    path.with_suffix(".index.json").write_text(json.dumps(index, separators=(",", ":")))
+    return raw / len(groups) / 1024, offset / len(groups) / 1024
 
 
 def read_layout(path):
@@ -563,8 +570,8 @@ def run_shards(features_dir, out, snapshot):
             "colour": colour[i].tolist(),
         }
 
-    raw, packed = write_shard_dir(out / "shards" / "base", numbers, groups, base)
-    log(f"shards/base: {len(groups)} files, {raw:.1f} KB raw, {packed:.1f} KB gzipped")
+    raw, packed = write_shard_pack(out / "shards" / "base.pack", numbers, groups, base)
+    log(f"shards/base.pack: {len(groups)} shards, {raw:.1f} KB raw, {packed:.1f} KB gzipped each")
     for f in families:
         M = family_matrix(f, data.X, data.cols, graph)
         nn = np.load(out / f"{f}.knn.npz")["idx"][:, 1 : NEIGHBOURS + 1]
@@ -573,8 +580,8 @@ def run_shards(features_dir, out, snapshot):
         def near(i):
             return [[int(numbers[j]), int(a), int(b)] for j, (a, b) in zip(nn[i], why[i])]
 
-        raw, packed = write_shard_dir(out / "shards" / f, numbers, groups, near)
-        log(f"shards/{f}: {len(groups)} files, {raw:.1f} KB raw, {packed:.1f} KB gzipped")
+        raw, packed = write_shard_pack(out / "shards" / f"{f}.pack", numbers, groups, near)
+        log(f"shards/{f}.pack: {len(groups)} shards, {raw:.1f} KB raw, {packed:.1f} KB gzipped each")
     log(f"manifest: {write_manifest(out / 'manifest.json', len(numbers), families, snapshot)}")
     log(f"done in {time.time() - t0:.0f}s")
 

@@ -1,6 +1,7 @@
 // Writes a small synthetic dataset in the layout step's output format, so
 // the site runs end to end without the real artefacts.
 import { mkdirSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { join } from "node:path";
 import { formatANumber } from "../shared/anumber.ts";
 
@@ -104,15 +105,21 @@ writeFileSync(
   ),
 );
 
-const shardDir = (kind: string) => {
-  const d = join(dir, "shards", kind);
-  mkdirSync(d, { recursive: true });
-  return d;
-};
-const base = shardDir("base");
-const perFamily = Object.fromEntries(FAMILIES.map((f) => [f, shardDir(f)]));
+// Shards of a kind are gzip members in one pack, with an index of byte ranges.
+mkdirSync(join(dir, "shards"), { recursive: true });
+const packs: Record<
+  string,
+  { parts: Buffer[]; index: Record<string, [number, number]>; offset: number }
+> = {};
+function addShard(kind: string, name: string, doc: unknown): void {
+  const pack = (packs[kind] ??= { parts: [], index: {}, offset: 0 });
+  const body = gzipSync(JSON.stringify(doc));
+  pack.index[name] = [pack.offset, body.length];
+  pack.parts.push(body);
+  pack.offset += body.length;
+}
 for (let start = 1; start <= COUNT; start += 100) {
-  const file = `${String(Math.floor(start / 100)).padStart(5, "0")}.json`;
+  const name = String(Math.floor(start / 100)).padStart(5, "0");
   const baseDoc: Record<string, unknown> = {};
   const near: Record<string, Record<string, unknown>> = Object.fromEntries(
     FAMILIES.map((f) => [f, {}]),
@@ -139,7 +146,11 @@ for (let start = 1; start <= COUNT; start += 100) {
       ]);
     }
   }
-  writeFileSync(join(base, file), JSON.stringify(baseDoc));
-  for (const f of FAMILIES) writeFileSync(join(perFamily[f]!, file), JSON.stringify(near[f]));
+  addShard("base", name, baseDoc);
+  for (const f of FAMILIES) addShard(f, name, near[f]);
+}
+for (const [kind, pack] of Object.entries(packs)) {
+  writeFileSync(join(dir, "shards", `${kind}.pack`), Buffer.concat(pack.parts));
+  writeFileSync(join(dir, "shards", `${kind}.index.json`), JSON.stringify(pack.index));
 }
 console.log(`fixture data for ${COUNT} sequences written to ${out}`);
