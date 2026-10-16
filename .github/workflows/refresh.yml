@@ -46,7 +46,7 @@ jobs:
         run: |
           cargo build --release --manifest-path tools/Cargo.toml
           tools/target/release/atlas features data/dumps/stripped.gz data/dumps/names.gz data/features --oeisdata data/oeisdata
-      - name: download the previous artefacts
+      - name: download the previous artifacts
         run: |
           mkdir -p data/prev
           base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/sequence-atlas/objects/$GENERATION"

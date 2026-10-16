@@ -6,7 +6,7 @@ import numpy as np
 
 import layout
 
-COLOUR_COLUMNS = [
+COLOR_COLUMNS = [
     "g_poly_slope", "g_poly_resid", "g_exp_slope", "g_exp_resid", "g_fact_resid", "g_ratio_trend",
     "r_order", "r_found", "r_diff_degree", "r_poly", "r_period", "r_eventually_constant",
 ]
@@ -19,14 +19,14 @@ FACTORIALS = {"g_poly_slope": 14.859, "g_poly_resid": 3.3, "g_exp_slope": 1.014,
 
 
 def rows(*values):
-    X = np.zeros((len(values), len(COLOUR_COLUMNS)), dtype=np.float32)
+    X = np.zeros((len(values), len(COLOR_COLUMNS)), dtype=np.float32)
     for i, v in enumerate(values):
         for name, x in v.items():
-            X[i, COLOUR_COLUMNS.index(name)] = x
+            X[i, COLOR_COLUMNS.index(name)] = x
     return X
 
 
-def test_layout_header_and_quantised_point(tmp_path):
+def test_layout_header_and_quantized_point(tmp_path):
     Y = np.array([[-1.0, 2.0], [3.0, 6.0], [1.0, 3.0]], dtype=np.float32)
     q = layout.write_layout(tmp_path / "f.layout.bin", Y)
     raw = (tmp_path / "f.layout.bin").read_bytes()
@@ -48,11 +48,11 @@ def test_explain_picks_shared_extreme_columns():
     assert layout.explain(Z, nn)[0].tolist() == [[0, 1], [2, 1]]
 
 
-def test_colour_codes_for_known_sequences():
-    cols = [("test", name) for name in COLOUR_COLUMNS]
+def test_color_codes_for_known_sequences():
+    cols = [("test", name) for name in COLOR_COLUMNS]
     X = rows(ONES, SQUARES, POWERS_OF_TWO, FACTORIALS)
     keywords = [["nonn", "core", "easy", "mult"], ["nonn", "tabl", "easy"], ["hard", "nonn"], ["nonn"]]
-    codes = layout.colour_codes(X, cols, keywords)
+    codes = layout.color_codes(X, cols, keywords)
     assert codes.dtype == np.uint8 and codes.shape == (4, 3)
     assert codes[:, 0].tolist() == [0, 2, 5, 6]
     assert codes[:, 1].tolist() == [1, 3, 1, 0]
@@ -60,8 +60,8 @@ def test_colour_codes_for_known_sequences():
 
 
 def test_recurrence_order_is_capped():
-    cols = [("test", name) for name in COLOUR_COLUMNS]
-    codes = layout.colour_codes(rows({"r_order": 40, "r_found": 1}), cols, [[]])
+    cols = [("test", name) for name in COLOR_COLUMNS]
+    codes = layout.color_codes(rows({"r_order": 40, "r_found": 1}), cols, [[]])
     assert codes[0, 1] == 12
 
 
@@ -112,7 +112,7 @@ def test_manifest(tmp_path):
     assert len(written["version"]) == 8 and written["version"].isdigit()
 
 
-def test_place_new_lands_between_its_neighbours_and_inherits_their_cluster():
+def test_place_new_lands_between_its_neighbors_and_inherits_their_cluster():
     M = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [10.0, 10.0], [0.3, 0.3]], dtype=np.float32)
     positions = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0], [50.0, 50.0]], dtype=np.float32)
     clusters = np.array([7, 7, layout.NOISE, 3], dtype=np.uint16)

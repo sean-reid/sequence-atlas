@@ -1,4 +1,4 @@
-// Uploads the artefact directory to the R2 bucket through the Cloudflare REST
+// Uploads the artifact directory to the R2 bucket through the Cloudflare REST
 // API, sending only objects whose content hash differs from the hashes.json
 // recorded by the previous sync, then writes the new hashes.json last.
 import { createHash } from "node:crypto";
@@ -8,7 +8,7 @@ import { join, relative } from "node:path";
 const dir = process.argv[2] ?? "";
 const prefix = process.argv[3] ?? "";
 if (!dir || !prefix) {
-  console.error("usage: node scripts/r2-sync.ts <artefact-dir> <key-prefix>");
+  console.error("usage: node scripts/r2-sync.ts <artifact-dir> <key-prefix>");
   process.exit(2);
 }
 const token = process.env.CLOUDFLARE_API_TOKEN;

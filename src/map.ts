@@ -11,7 +11,7 @@ const NOISE = 65535;
 const VERTEX = `#version 300 es
 in vec2 p0;
 in vec2 p1;
-in float colour;
+in float color;
 uniform float t;
 uniform vec2 scale;
 uniform vec2 offset;
@@ -23,7 +23,7 @@ void main() {
   vec2 p = mix(p0, p1, t) / 32767.5 - 1.0;
   gl_Position = vec4(p * scale + offset, 0.0, 1.0);
   gl_PointSize = size;
-  vc = highlight > 0.5 ? palette[0] : palette[int(colour)];
+  vc = highlight > 0.5 ? palette[0] : palette[int(color)];
 }`;
 
 const FRAGMENT = `#version 300 es
@@ -59,17 +59,17 @@ function hexToRgb(hex: string): [number, number, number] {
 export class MapRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram;
-  private buffers: { p0: WebGLBuffer; p1: WebGLBuffer; colour: WebGLBuffer };
+  private buffers: { p0: WebGLBuffer; p1: WebGLBuffer; color: WebGLBuffer };
   private count = 0;
   private t = 1;
   private tStart = 0;
   private current: FamilyData | null = null;
-  private colourSource: ((data: FamilyData) => Float32Array) | null = null;
+  private colorSource: ((data: FamilyData) => Float32Array) | null = null;
   view: View = { scale: 1.7, x: 0, y: 0 };
   dark = true;
   reduceMotion = false;
   selected = -1;
-  highlightColour = "#ffffff";
+  highlightColor = "#ffffff";
 
   constructor(private canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", { antialias: false, premultipliedAlpha: true });
@@ -90,7 +90,7 @@ export class MapRenderer {
       if (!b) throw new Error("no buffer");
       return b;
     };
-    this.buffers = { p0: make(), p1: make(), colour: make() };
+    this.buffers = { p0: make(), p1: make(), color: make() };
     this.resize();
   }
 
@@ -119,8 +119,8 @@ export class MapRenderer {
     gl.vertexAttribPointer(loc, size, type, false, 0, 0);
   }
 
-  /** Default colouring: slot 0 for noise, the eight palette slots by cluster id. */
-  static clusterColours(data: FamilyData): Float32Array {
+  /** Default coloring: slot 0 for noise, the eight palette slots by cluster id. */
+  static clusterColors(data: FamilyData): Float32Array {
     const out = new Float32Array(data.layout.count);
     for (let i = 0; i < out.length; i++) {
       const c = data.clusters[i] ?? NOISE;
@@ -129,15 +129,15 @@ export class MapRenderer {
     return out;
   }
 
-  setColourSource(source: (data: FamilyData) => Float32Array): void {
-    this.colourSource = source;
-    if (this.current) this.recolour();
+  setColorSource(source: (data: FamilyData) => Float32Array): void {
+    this.colorSource = source;
+    if (this.current) this.recolor();
   }
 
-  recolour(): void {
+  recolor(): void {
     if (!this.current) return;
-    const source = this.colourSource ?? MapRenderer.clusterColours;
-    this.setAttribute("colour", this.buffers.colour, source(this.current), 1, this.gl.FLOAT);
+    const source = this.colorSource ?? MapRenderer.clusterColors;
+    this.setAttribute("color", this.buffers.color, source(this.current), 1, this.gl.FLOAT);
   }
 
   show(data: FamilyData): void {
@@ -146,7 +146,7 @@ export class MapRenderer {
     this.count = data.layout.count;
     this.setAttribute("p0", this.buffers.p0, from.layout.points, 2, this.gl.UNSIGNED_SHORT);
     this.setAttribute("p1", this.buffers.p1, data.layout.points, 2, this.gl.UNSIGNED_SHORT);
-    this.recolour();
+    this.recolor();
     this.t = from === data || this.reduceMotion ? 1 : 0;
     this.tStart = performance.now();
   }
@@ -154,7 +154,7 @@ export class MapRenderer {
   setPalette(noise: string, hexes: string[], highlight: string): void {
     const flat = [noise, ...hexes].flatMap(hexToRgb);
     this.gl.uniform3fv(this.gl.getUniformLocation(this.program, "palette"), new Float32Array(flat));
-    this.highlightColour = highlight;
+    this.highlightColor = highlight;
   }
 
   get animating(): boolean {
@@ -195,7 +195,7 @@ export class MapRenderer {
     gl.drawArrays(gl.POINTS, 0, this.count);
     if (this.selected >= 0 && this.selected < this.count) {
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      const [r, g, b] = hexToRgb(this.highlightColour);
+      const [r, g, b] = hexToRgb(this.highlightColor);
       gl.uniform3fv(u("palette"), new Float32Array([r, g, b, ...new Array(24).fill(0)]));
       gl.uniform1f(u("highlight"), 1);
       gl.uniform1f(u("alpha"), 1);
@@ -218,9 +218,9 @@ export class MapRenderer {
     this.setPalette(noise, hexes, highlight);
   }
 
-  /** Colour every point by a code of its own rather than its cluster. */
-  colourByCodes(slots: Uint8Array | null): void {
-    this.setColourSource(slots ? () => Float32Array.from(slots) : MapRenderer.clusterColours);
+  /** Color every point by a code of its own rather than its cluster. */
+  colorByCodes(slots: Uint8Array | null): void {
+    this.setColorSource(slots ? () => Float32Array.from(slots) : MapRenderer.clusterColors);
   }
 
   /** Screen position in CSS pixels of a point given in embedding units. */
@@ -230,10 +230,10 @@ export class MapRenderer {
     const [x0, y0, x1, y1] = data.layout.bounds;
     const qx = ((ex - x0) / (x1 - x0)) * 65535;
     const qy = ((ey - y0) / (y1 - y0)) * 65535;
-    return this.quantisedToScreen(qx, qy);
+    return this.quantizedToScreen(qx, qy);
   }
 
-  quantisedToScreen(qx: number, qy: number): [number, number] {
+  quantizedToScreen(qx: number, qy: number): [number, number] {
     const aspect = this.canvas.width / this.canvas.height;
     const nx = qx / 32767.5 - 1;
     const ny = qy / 32767.5 - 1;
@@ -242,7 +242,7 @@ export class MapRenderer {
     return [sx * this.canvas.clientWidth, sy * this.canvas.clientHeight];
   }
 
-  screenToQuantised(sx: number, sy: number): [number, number] {
+  screenToQuantized(sx: number, sy: number): [number, number] {
     const aspect = this.canvas.width / this.canvas.height;
     const cx = (sx / this.canvas.clientWidth) * 2 - 1;
     const cy = 1 - (sy / this.canvas.clientHeight) * 2;
@@ -251,13 +251,13 @@ export class MapRenderer {
     return [(nx + 1) * 32767.5, (ny + 1) * 32767.5];
   }
 
-  /** Quantised units per CSS pixel at the current zoom, along y. */
+  /** Quantized units per CSS pixel at the current zoom, along y. */
   unitsPerPixel(): number {
     return 65536 / (this.canvas.clientHeight * this.view.scale);
   }
 
-  /** Centre the view on a point index at a given zoom. */
-  centreOn(index: number, scale: number): void {
+  /** Center the view on a point index at a given zoom. */
+  centerOn(index: number, scale: number): void {
     const data = this.current;
     if (!data) return;
     const qx = data.layout.points[index * 2] ?? 0;

@@ -1,18 +1,18 @@
-"""Turn the atlas feature matrix into layouts, clusters, labels, and neighbours.
+"""Turn the atlas feature matrix into layouts, clusters, labels, and neighbors.
 
 usage:
   uv run layout.py embed <features-dir> <out-dir> [--families a,b,c] [--sample N] [--epochs N]
   uv run layout.py shards <features-dir> <out-dir> --snapshot <date>
   uv run layout.py place <features-dir> <prev-out-dir> <out-dir> --snapshot <date>
 
-embed runs per family and caches the neighbour graph and embedding as .npz and
+embed runs per family and caches the neighbor graph and embedding as .npz and
 .npy under the out dir, so clustering and labelling can be rerun without
-repeating UMAP. shards reads every family's neighbour graph from the out dir
+repeating UMAP. shards reads every family's neighbor graph from the out dir
 and writes the per-sequence files the site fetches, with manifest.json
 recording the count, the families, and the OEIS dump date given as --snapshot.
 place is the weekly refresh: sequences missing from the previous out dir are
 put into its layouts at the distance-weighted mean of their nearest old
-neighbours in feature space, then shards runs over everything.
+neighbors in feature space, then shards runs over everything.
 """
 
 import csv
@@ -37,9 +37,9 @@ KEYWORDS = [
     "sign", "tabf", "tabl", "walk", "word",
 ]
 SPECTRAL_DIMS = 32
-NEIGHBOURS = 20
+NEIGHBORS = 20
 UMAP_K = 15
-KNN_K = NEIGHBOURS + 1
+KNN_K = NEIGHBORS + 1
 STOP = set("""
 a an the of for and or with in to on by at is are as that which whose where from into
 than not no if all one two such its this be when then also each any other over under
@@ -102,7 +102,7 @@ def take(data, keep):
     )
 
 
-def standardise(M):
+def standardize(M):
     M = M.astype(np.float64)
     lo = np.percentile(M, 0.5, axis=0)
     hi = np.percentile(M, 99.5, axis=0)
@@ -127,7 +127,7 @@ def graph_features(numbers, keywords, xrefs):
     A = ((A + A.T) > 0).astype(np.float64).tocsr()
     deg = np.asarray(A.sum(axis=1)).ravel()
     log(f"xref graph: {n} nodes, {A.nnz // 2} edges, {np.sum(deg == 0)} isolated")
-    # Regularised normalised adjacency (Amini et al.): every pair gains tau/n of
+    # Regularised normalized adjacency (Amini et al.): every pair gains tau/n of
     # an edge, which joins the small components to the whole and stops the top
     # eigenvectors from being component indicators.
     tau = deg.mean()
@@ -235,15 +235,15 @@ def family_matrix(family, X, cols, graph):
     if family == "graph":
         return graph
     if family == "all":
-        parts = [standardise(X[:, [i for i, c in enumerate(cols) if c[0] == f]]) for f in ("growth", "arith", "recur")]
+        parts = [standardize(X[:, [i for i, c in enumerate(cols) if c[0] == f]]) for f in ("growth", "arith", "recur")]
         parts.append(graph * 0.5)
         return np.hstack(parts)
     idx = [i for i, c in enumerate(cols) if c[0] == family]
-    return standardise(X[:, idx])
+    return standardize(X[:, idx])
 
 
 def knn_graph(M, cache):
-    """Approximate nearest neighbours in feature space, shared by UMAP and the neighbour lists."""
+    """Approximate nearest neighbors in feature space, shared by UMAP and the neighbor lists."""
     if cache.exists():
         d = np.load(cache)
         return d["idx"], d["dist"]
@@ -364,7 +364,7 @@ def label_clusters(labels, names, keywords):
 
 
 def explain(Z, nn, limit=2):
-    """For each neighbour, the columns where both points are alike and both sit
+    """For each neighbor, the columns where both points are alike and both sit
     away from the corpus mean: high shared magnitude, low difference."""
     out = np.zeros((nn.shape[0], nn.shape[1], limit), dtype=np.uint8)
     for start in range(0, len(Z), 20000):
@@ -404,7 +404,7 @@ def keyword_group(kws):
     return next((code for k, code in KEYWORD_GROUPS if k in kws), 0)
 
 
-def colour_codes(X, cols, keywords):
+def color_codes(X, cols, keywords):
     """Three bytes per sequence: growth class, recurrence order, keyword group."""
     c = {name: X[:, i] for i, (_, name) in enumerate(cols)}
     order = np.where(c["r_found"] > 0, np.minimum(c["r_order"], MAX_ORDER), 0)
@@ -525,7 +525,7 @@ def run_embed(features_dir, out, families, sample, epochs):
             "clusters": len(clusters),
             "noise": float(np.mean(labels < 0)),
             "top_clusters": [f"{c['size']}: {c['label']}" for c in clusters[:25]],
-            "neighbours": sample_nn,
+            "neighbors": sample_nn,
         }
     report["seconds"] = round(time.time() - t0)
     json.dump(report, open(out / f"report-{'-'.join(families)}.json", "w"), indent=1)
@@ -553,11 +553,11 @@ def run_shards(features_dir, out, snapshot):
         if path.exists():
             clusters[f] = np.fromfile(path, dtype=np.uint16)
     json.dump(feature_names(families, data.cols), open(out / "features.json", "w"))
-    colour = colour_codes(data.X, data.cols, data.keywords)
-    colour.tofile(out / "colour.u8")
-    histogram("growth class", colour[:, 0], GROWTH_CLASSES)
-    histogram("recurrence order", colour[:, 1])
-    histogram("keyword group", colour[:, 2], ["none"] + [k for k, _ in KEYWORD_GROUPS if k != "tabf"])
+    color = color_codes(data.X, data.cols, data.keywords)
+    color.tofile(out / "color.u8")
+    histogram("growth class", color[:, 0], GROWTH_CLASSES)
+    histogram("recurrence order", color[:, 1])
+    histogram("keyword group", color[:, 2], ["none"] + [k for k, _ in KEYWORD_GROUPS if k != "tabf"])
     groups = shard_groups(numbers)
 
     def base(i):
@@ -567,14 +567,14 @@ def run_shards(features_dir, out, snapshot):
             "offset": data.offsets[i],
             "keywords": data.keywords[i],
             "cluster": {f: None if c[i] == NOISE else int(c[i]) for f, c in clusters.items()},
-            "colour": colour[i].tolist(),
+            "color": color[i].tolist(),
         }
 
     raw, packed = write_shard_pack(out / "shards" / "base.pack", numbers, groups, base)
     log(f"shards/base.pack: {len(groups)} shards, {raw:.1f} KB raw, {packed:.1f} KB gzipped each")
     for f in families:
         M = family_matrix(f, data.X, data.cols, graph)
-        nn = np.load(out / f"{f}.knn.npz")["idx"][:, 1 : NEIGHBOURS + 1]
+        nn = np.load(out / f"{f}.knn.npz")["idx"][:, 1 : NEIGHBORS + 1]
         why = explain(M, nn)
 
         def near(i):
@@ -592,7 +592,7 @@ PLACE_K = 15
 def place_new(M, old_rows, new_rows, positions, clusters):
     """Position and cluster for each new row from its nearest old rows in
     feature space: the distance-weighted mean of their positions and the
-    commonest of their clusters, noise only when every neighbour is noise."""
+    commonest of their clusters, noise only when every neighbor is noise."""
     old = M[old_rows].astype(np.float32)
     old_sq = np.einsum("ij,ij->i", old, old)
     pos = np.zeros((len(new_rows), 2), dtype=np.float32)
@@ -615,7 +615,7 @@ def place_new(M, old_rows, new_rows, positions, clusters):
 
 def run_place(features_dir, prev, out, snapshot):
     """Add the sequences the dumps gained since the last run to frozen layouts,
-    then rebuild neighbours and shards for everything."""
+    then rebuild neighbors and shards for everything."""
     t0 = time.time()
     data = load(features_dir)
     prev_numbers = np.fromfile(prev / "numbers.u32", dtype=np.uint32)

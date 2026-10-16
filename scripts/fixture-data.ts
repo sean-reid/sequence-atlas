@@ -1,5 +1,5 @@
 // Writes a small synthetic dataset in the layout step's output format, so
-// the site runs end to end without the real artefacts.
+// the site runs end to end without the real artifacts.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { join } from "node:path";
@@ -25,7 +25,7 @@ writeFileSync(
   JSON.stringify({ version, count: COUNT, families: FAMILIES, snapshot: "2026-01-01" }),
 );
 
-const centres = [
+const centers = [
   [-4, -3],
   [3, 4],
   [5, -4],
@@ -35,14 +35,14 @@ const labels = ["fibonacci lucas", "primes congruent", "decimal expansion"];
 function layout(family: string): void {
   const points = new Uint16Array(COUNT * 2);
   const clusters = new Uint16Array(COUNT);
-  const sums = centres.map(() => [0, 0, 0]);
+  const sums = centers.map(() => [0, 0, 0]);
   const xs: number[] = [];
   const ys: number[] = [];
   for (let i = 0; i < COUNT; i++) {
     const c = i % 3;
     const shift = family === "all" ? 0 : FAMILIES.indexOf(family);
-    const x = centres[c]![0]! + (rand() - 0.5) * 2 + shift * 0.3;
-    const y = centres[c]![1]! + (rand() - 0.5) * 2 - shift * 0.2;
+    const x = centers[c]![0]! + (rand() - 0.5) * 2 + shift * 0.3;
+    const y = centers[c]![1]! + (rand() - 0.5) * 2 - shift * 0.2;
     xs.push(x);
     ys.push(y);
     clusters[i] = i % 50 === 49 ? 65535 : c;
@@ -86,14 +86,14 @@ function layout(family: string): void {
 }
 FAMILIES.forEach(layout);
 
-const colour = new Uint8Array(COUNT * 3);
+const color = new Uint8Array(COUNT * 3);
 for (let i = 0; i < COUNT; i++) {
   const c = i % 3;
-  colour[i * 3] = c + 1;
-  colour[i * 3 + 1] = c === 0 ? 2 : 0;
-  colour[i * 3 + 2] = c === 0 ? 1 : 8;
+  color[i * 3] = c + 1;
+  color[i * 3 + 1] = c === 0 ? 2 : 0;
+  color[i * 3 + 2] = c === 0 ? 1 : 8;
 }
-writeFileSync(join(dir, "colour.u8"), Buffer.from(colour.buffer));
+writeFileSync(join(dir, "color.u8"), Buffer.from(color.buffer));
 
 const columns = ["growth rate", "parity balance", "recurrence order"];
 writeFileSync(
@@ -136,7 +136,7 @@ for (let start = 1; start <= COUNT; start += 100) {
       offset: 1,
       keywords: ["nonn", c === 0 ? "core" : "easy"],
       cluster: Object.fromEntries(FAMILIES.map((f) => [f, c])),
-      colour: [c + 1, c === 0 ? 2 : 0, c === 0 ? 1 : 8],
+      color: [c + 1, c === 0 ? 2 : 0, c === 0 ? 1 : 8],
     };
     for (const f of FAMILIES) {
       near[f]![id] = Array.from({ length: 5 }, (_, k) => [

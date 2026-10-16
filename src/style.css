@@ -559,20 +559,20 @@ select {
   color: var(--ink-faint);
 }
 
-.colours {
+.colors {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
 }
 
-.colours-label {
+.colors-label {
   font-size: 0.8125rem;
   color: var(--ink-soft);
   margin-right: 0.25rem;
 }
 
-.colours button {
+.colors button {
   min-height: 36px;
   padding: 0 0.7rem;
   font-size: 0.875rem;
@@ -609,7 +609,7 @@ select {
 }
 
 @media (max-width: 600px) {
-  .colours,
+  .colors,
   .legend {
     display: none;
   }

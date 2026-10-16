@@ -1,6 +1,6 @@
 import type { Layout } from "../shared/layout.ts";
 
-// Points bucketed on a fixed grid in quantised layout units so a hover
+// Points bucketed on a fixed grid in quantized layout units so a hover
 // only visits the cells under the cursor.
 const CELLS = 256;
 const CELL = 65536 / CELLS;
@@ -25,7 +25,7 @@ export class PointIndex {
     for (let i = 0; i < n; i++) this.items[fill[cellOf(i)]!++] = i;
   }
 
-  /** Nearest point to (qx, qy) in quantised units within radius r, or -1. */
+  /** Nearest point to (qx, qy) in quantized units within radius r, or -1. */
   nearest(qx: number, qy: number, r: number): number {
     const c0 = Math.max(0, Math.floor((qx - r) / CELL));
     const c1 = Math.min(CELLS - 1, Math.floor((qx + r) / CELL));

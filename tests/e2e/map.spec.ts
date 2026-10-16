@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("a deep link opens the sequence with its neighbours", async ({ page }, info) => {
+test("a deep link opens the sequence with its neighbors", async ({ page }, info) => {
   await page.goto("/A000045/recur");
   await expect(page.locator("body[data-ready]")).toBeVisible();
   const panel = page.locator("#panel");
@@ -25,7 +25,7 @@ test("switching the measure keeps the selection and rewrites the url", async ({ 
   await expect(page).toHaveURL(/\/A000045(#|$)/);
 });
 
-test("picking a neighbour moves the selection", async ({ page }) => {
+test("picking a neighbor moves the selection", async ({ page }) => {
   await page.goto("/A000045");
   await expect(page.locator("#p-near .pick").first()).toBeVisible();
   const first = await page.locator("#p-near .id").first().textContent();
@@ -73,18 +73,18 @@ test("search lists matches and picking one selects it", async ({ page }) => {
   await expect(page.locator("#results .note")).toHaveText("Nothing matches.");
 });
 
-test("the colour variable recolours the map, shows a legend, and survives a reload", async ({
+test("the color variable recolors the map, shows a legend, and survives a reload", async ({
   page,
 }, info) => {
-  test.skip(info.project.name === "mobile", "the colour control is hidden on phones");
+  test.skip(info.project.name === "mobile", "the color control is hidden on phones");
   await page.goto("/");
   await expect(page.locator("body[data-ready]")).toBeVisible();
   await expect(page.locator("#legend")).toBeHidden();
-  await page.locator(".colours button", { hasText: "Growth" }).click();
+  await page.locator(".colors button", { hasText: "Growth" }).click();
   await expect(page).toHaveURL(/c=growth/);
   await expect(page.locator("#legend li")).toHaveCount(8);
   await page.reload();
   await expect(page.locator("body[data-ready]")).toBeVisible();
-  await expect(page.locator(".colours button.on")).toHaveText("Growth");
-  await page.screenshot({ path: info.outputPath("growth-colour.png") });
+  await expect(page.locator(".colors button.on")).toHaveText("Growth");
+  await page.screenshot({ path: info.outputPath("growth-color.png") });
 });
