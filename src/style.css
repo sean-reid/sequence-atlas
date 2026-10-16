@@ -559,20 +559,36 @@ select {
   color: var(--ink-faint);
 }
 
+.colours {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.colours-label {
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  margin-right: 0.25rem;
+}
+
+.colours button {
+  min-height: 36px;
+  padding: 0 0.7rem;
+  font-size: 0.875rem;
+}
+
 .legend[hidden] {
   display: none;
 }
 
 .legend {
-  position: fixed;
-  top: 4.5rem;
-  right: 1.25rem;
-  z-index: 1;
   margin: 0;
   padding: 0.5rem 0.75rem;
   list-style: none;
   display: grid;
   gap: 0.2rem;
+  width: max-content;
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: 6px;
@@ -592,19 +608,9 @@ select {
   flex: none;
 }
 
-.panel:not([hidden]) ~ .legend,
-.legend.beside-panel {
-  right: 26.5rem;
-}
-
 @media (max-width: 600px) {
+  .colours,
   .legend {
-    display: none;
-  }
-}
-
-@media (max-width: 600px) {
-  .colour {
     display: none;
   }
 }
