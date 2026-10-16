@@ -5,10 +5,23 @@ export interface Env extends SearchEnv {
   DATA: R2Bucket;
 }
 
+// Every response the Worker builds carries these; the asset store's _headers
+// covers only files it serves itself.
+const SECURITY = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+};
+
 const json = (body: unknown, status = 200, cache = "no-store"): Response =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": cache },
+    headers: {
+      ...SECURITY,
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": cache,
+    },
   });
 
 const error = (status: number, message: string): Response => json({ error: message }, status);
@@ -21,8 +34,6 @@ const TYPES: Record<string, string> = {
   u8: "application/octet-stream",
 };
 
-// Versioned objects never change, so they cache for a year; the manifest
-// names the current version and is rechecked every five minutes.
 async function serveData(request: Request, env: Env, key: string): Promise<Response> {
   const object = await env.DATA.get(key);
   if (!object) {
@@ -35,6 +46,7 @@ async function serveData(request: Request, env: Env, key: string): Promise<Respo
   }
   const ext = key.split(".").pop() ?? "";
   const headers = new Headers({
+    ...SECURITY,
     "content-type": TYPES[ext] ?? "application/octet-stream",
     "cache-control": key.startsWith("v/")
       ? "public, max-age=31536000, immutable"
@@ -106,6 +118,7 @@ async function serveShard(
   return new Response(body.body, {
     encodeBody: "manual",
     headers: {
+      ...SECURITY,
       "content-type": "application/json; charset=utf-8",
       "content-encoding": "gzip",
       "cache-control": "public, max-age=31536000, immutable",
@@ -113,31 +126,70 @@ async function serveShard(
   });
 }
 
+// One host owns a whole IPv6 /64, so the budget is per /64 there and per address on IPv4.
+function rateKey(request: Request): string {
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  if (!ip.includes(":")) return ip;
+  const [left = ""] = ip.split("::");
+  return left.split(":").slice(0, 4).join(":") + "::/64";
+}
+
 async function handleSearch(request: Request, url: URL, env: Env): Promise<Response> {
-  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
-  const { success } = await env.SEARCH_RATE.limit({ key });
+  const { success } = await env.SEARCH_RATE.limit({ key: rateKey(request) });
   if (!success) return error(429, "slow down");
   const q = (url.searchParams.get("q") ?? "").slice(0, 200);
   const body = await search(env, q);
   return json(body, 200, "public, max-age=3600");
 }
 
+// Objects under v/ are keyed by the manifest's build id, so the edge may keep
+// them for a year; the manifest itself is rechecked every five minutes.
+async function cached(
+  request: Request,
+  ctx: ExecutionContext,
+  make: () => Promise<Response>,
+): Promise<Response> {
+  const cache = caches.default;
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const response = await make();
+  if (response.ok) ctx.waitUntil(cache.put(request, response.clone()));
+  return response;
+}
+
+async function route(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(request.url);
+  const { pathname } = url;
+  const method = request.method === "HEAD" ? "GET" : request.method;
+  if (pathname === "/api/health") return json({ ok: true });
+  if (pathname === "/api/search" && method === "GET") return handleSearch(request, url, env);
+  if (pathname.startsWith("/api/")) return error(method === "GET" ? 404 : 405, "not found");
+  if (pathname.startsWith("/data/")) {
+    if (method !== "GET") return error(405, "method not allowed");
+    let key: string;
+    try {
+      key = decodeURIComponent(pathname.slice("/data/".length));
+    } catch {
+      return error(404, "not found");
+    }
+    if (!key) return error(404, "not found");
+    const shard = /^(v\/[^/]+)\/shards\/([a-z]+)\/(\d{5})\.json$/.exec(key);
+    // Shard members are pre-compressed and the cache would hand them back
+    // re-encoded, so only whole objects go through the edge cache.
+    if (shard) return serveShard(request, env, shard[1]!, shard[2]!, shard[3]!);
+    return cached(request, ctx, () => serveData(request, env, key));
+  }
+  return env.ASSETS.fetch(request);
+}
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-    const { pathname } = url;
-    if (pathname === "/api/health") return json({ ok: true });
-    if (pathname === "/api/search" && request.method === "GET") {
-      return handleSearch(request, url, env);
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    try {
+      const response = await route(request, env, ctx);
+      return request.method === "HEAD" ? new Response(null, response) : response;
+    } catch (err) {
+      console.error(err);
+      return error(500, "internal error");
     }
-    if (pathname.startsWith("/api/")) return error(404, "not found");
-    if (pathname.startsWith("/data/") && request.method === "GET") {
-      const key = decodeURIComponent(pathname.slice("/data/".length));
-      if (!key) return error(404, "not found");
-      const shard = /^(v\/[^/]+)\/shards\/([a-z]+)\/(\d{5})\.json$/.exec(key);
-      if (shard) return serveShard(request, env, shard[1]!, shard[2]!, shard[3]!);
-      return serveData(request, env, key);
-    }
-    return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
