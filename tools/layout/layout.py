@@ -9,7 +9,7 @@ embed runs per family and caches the neighbor graph and embedding as .npz and
 .npy under the out dir, so clustering and labelling can be rerun without
 repeating UMAP. shards reads every family's neighbor graph from the out dir
 and writes the per-sequence files the site fetches, with manifest.json
-recording the count, the families, and the OEIS dump date given as --snapshot.
+recording the count, the families, and the oeisdata commit date given as --snapshot.
 place is the weekly refresh: sequences missing from the previous out dir are
 put into its layouts at the distance-weighted mean of their nearest old
 neighbors in feature space, then shards runs over everything.
@@ -614,7 +614,7 @@ def place_new(M, old_rows, new_rows, positions, clusters):
 
 
 def run_place(features_dir, prev, out, snapshot):
-    """Add the sequences the dumps gained since the last run to frozen layouts,
+    """Add the sequences oeisdata gained since the last run to frozen layouts,
     then rebuild neighbors and shards for everything."""
     t0 = time.time()
     data = load(features_dir)
