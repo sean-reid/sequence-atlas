@@ -20,7 +20,7 @@ if (!token || !account) {
 }
 const base = `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/objects/`;
 const headers = { authorization: `Bearer ${token}` };
-const CONCURRENCY = 4;
+const CONCURRENCY = 6;
 
 function walk(root: string): string[] {
   const out: string[] = [];
