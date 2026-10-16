@@ -112,7 +112,7 @@ export class Panel {
       nm.textContent = names[i]?.name ?? "";
       const why = document.createElement("span");
       why.className = "why";
-      why.textContent = [phrases[row[1]], phrases[row[2]]].filter(Boolean).join(", ");
+      why.textContent = [...new Set([phrases[row[1]], phrases[row[2]]].filter(Boolean))].join(", ");
       button.append(idSpan, nm, why);
       li.append(button);
       near.append(li);

@@ -174,7 +174,10 @@ export class MapRenderer {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    if (this.dark) gl.blendFunc(gl.ONE, gl.ONE);
+    // Additive blending shows density when the whole map is on screen; once
+    // zoomed in the points are separate and additive only bleaches them.
+    const additive = this.dark && this.view.scale < 4;
+    if (additive) gl.blendFunc(gl.ONE, gl.ONE);
     else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     const aspect = this.canvas.width / this.canvas.height;
     const u = (n: string) => gl.getUniformLocation(this.program, n);
@@ -183,7 +186,10 @@ export class MapRenderer {
     gl.uniform2f(u("offset"), this.view.x, this.view.y);
     const size = Math.max(1.4, Math.min(9, this.view.scale * 1.15)) * this.dpr;
     gl.uniform1f(u("size"), size);
-    gl.uniform1f(u("alpha"), Math.min(0.85, 0.13 + this.view.scale * 0.06));
+    gl.uniform1f(
+      u("alpha"),
+      additive ? 0.13 + this.view.scale * 0.06 : Math.min(0.92, 0.5 + this.view.scale * 0.03),
+    );
     gl.uniform1f(u("highlight"), 0);
     gl.uniform1f(u("ring"), 0);
     gl.drawArrays(gl.POINTS, 0, this.count);

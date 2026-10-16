@@ -99,8 +99,10 @@ function placeLabels(): void {
   const h = canvas.clientHeight;
   const placed = chromeRects();
   const budget = (w < 768 ? 14 : 48) + placed.length;
+  const seen = new Set<string>();
   for (const c of current.info) {
     if (placed.length >= budget) break;
+    if (seen.has(c.label)) continue;
     const [x, y] = renderer.toScreen(c.cx, c.cy);
     if (x < 0 || y < 0 || x > w || y > h) continue;
     const bw = c.label.length * 6.6 + 8;
@@ -109,6 +111,7 @@ function placeLabels(): void {
       continue;
     }
     placed.push(box);
+    seen.add(c.label);
     const span = document.createElement("span");
     span.style.left = `${x}px`;
     span.style.top = `${y}px`;
