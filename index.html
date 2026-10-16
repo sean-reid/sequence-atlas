@@ -6,17 +6,138 @@
     <title>sequence-atlas</title>
     <meta
       name="description"
-      content="A map of the OEIS: every sequence as a point, near the sequences it is alike."
+      content="A map of the OEIS: every integer sequence as a point, near the sequences it is alike."
     />
     <meta name="color-scheme" content="dark light" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="/fonts/schibsted-grotesk.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/jetbrains-mono.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      try {
+        var t = localStorage.getItem("sequence-atlas:theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <main id="main">
-      <h1>sequence-atlas</h1>
-      <p>A map of the OEIS. Coming together.</p>
-    </main>
+    <canvas id="map" aria-label="Map of OEIS sequences"></canvas>
+    <div id="labels" class="labels" aria-hidden="true"></div>
+
+    <header class="top">
+      <div class="brand">
+        <h1 class="wordmark">sequence-atlas</h1>
+        <p class="lede">
+          Every OEIS sequence as a point, beside the sequences it is alike. Pick a measure, then a
+          point.
+        </p>
+      </div>
+      <nav class="metrics" aria-label="Measure of likeness">
+        <button type="button" class="on" data-family="all">All</button>
+        <button type="button" data-family="growth">Growth</button>
+        <button type="button" data-family="arith">Arithmetic</button>
+        <button type="button" data-family="recur">Recurrence</button>
+        <button type="button" data-family="graph">References</button>
+      </nav>
+    </header>
+
+    <div class="tools">
+      <form class="search" role="search">
+        <label class="visually-hidden" for="q">Find a sequence</label>
+        <input
+          id="q"
+          type="search"
+          placeholder="A000045, Fibonacci, or 1, 1, 2, 3, 5"
+          autocomplete="off"
+        />
+      </form>
+      <label class="colour">
+        <span class="visually-hidden">Colour points by</span>
+        <select id="colour">
+          <option value="cluster">Colour: cluster</option>
+          <option value="growth">Colour: growth class</option>
+          <option value="order">Colour: recurrence order</option>
+          <option value="keyword">Colour: keyword</option>
+        </select>
+      </label>
+      <button type="button" id="theme" class="theme">Light</button>
+    </div>
+
+    <aside class="panel" id="panel" aria-label="Selected sequence">
+      <header class="panel-head">
+        <p class="anumber">A000045</p>
+        <h2 class="name">Fibonacci numbers: F(n) = F(n-1) + F(n-2) with F(0) = 0 and F(1) = 1.</h2>
+        <button type="button" class="close" aria-label="Close">Close</button>
+      </header>
+      <p class="terms">
+        0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765,
+        10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, …
+      </p>
+      <p class="keywords">core nonn nice easy hear</p>
+      <p class="summary">
+        Exponential growth at ratio 1.618, a linear recurrence of order 2, differences never settle.
+        In the combined map it sits in the island
+        <span class="cluster">convergents fibonacci continued</span>.
+      </p>
+      <h3 class="near-head">Nearest in the combined map</h3>
+      <ol class="near">
+        <li>
+          <span class="id">A000032</span><span class="nm">Lucas numbers beginning at 2</span
+          ><span class="why">order 2, ratio 1.618</span>
+        </li>
+        <li>
+          <span class="id">A000204</span><span class="nm">Lucas numbers beginning with 1</span
+          ><span class="why">order 2, ratio 1.618</span>
+        </li>
+        <li>
+          <span class="id">A000073</span><span class="nm">Tribonacci numbers</span
+          ><span class="why">order 3, exponential</span>
+        </li>
+        <li>
+          <span class="id">A000930</span><span class="nm">Narayana's cows sequence</span
+          ><span class="why">order 3, exponential</span>
+        </li>
+        <li>
+          <span class="id">A001045</span><span class="nm">Jacobsthal sequence</span
+          ><span class="why">order 2, exponential</span>
+        </li>
+        <li>
+          <span class="id">A000129</span><span class="nm">Pell numbers</span
+          ><span class="why">order 2, exponential</span>
+        </li>
+        <li>
+          <span class="id">A006190</span><span class="nm">a(n) = 3*a(n-1) + a(n-2)</span
+          ><span class="why">order 2, exponential</span>
+        </li>
+        <li>
+          <span class="id">A000285</span
+          ><span class="nm">a(0) = 1, a(1) = 4, and a(n) = a(n-1) + a(n-2)</span
+          ><span class="why">order 2, ratio 1.618</span>
+        </li>
+      </ol>
+      <p class="oeis"><a href="https://oeis.org/A000045">A000045 at oeis.org</a></p>
+    </aside>
+
+    <footer class="foot">
+      <a href="https://github.com/sean-reid/sequence-atlas">Source</a>
+      <span
+        >Data from the <a href="https://oeis.org">OEIS</a>, CC BY-SA 4.0, snapshot 2026-10-15. Not
+        affiliated with the OEIS Foundation.</span
+      >
+    </footer>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
