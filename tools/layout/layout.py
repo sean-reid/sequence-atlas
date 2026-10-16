@@ -286,7 +286,8 @@ def cluster(Y):
     rng = np.random.default_rng(7)
     pick = np.sort(rng.choice(n, min(n, CLUSTER_SAMPLE), replace=False))
     size = max(50, len(pick) // 1500)
-    sub = HDBSCAN(min_cluster_size=size, min_samples=10, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y[pick])
+    cap = len(pick) // 20
+    sub = HDBSCAN(min_cluster_size=size, min_samples=10, max_cluster_size=cap, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y[pick])
     labels = np.full(n, -1, dtype=np.int64)
     labels[pick] = sub
     rest = np.setdiff1d(np.arange(n), pick)
@@ -294,7 +295,8 @@ def cluster(Y):
         labels[rest] = KNeighborsClassifier(n_neighbors=7).fit(Y[pick], sub).predict(Y[rest])
     k = labels.max() + 1
     noise = np.mean(labels < 0)
-    log(f"hdbscan: {k} clusters, {noise:.1%} noise, min size {size}, sample {len(pick)}, in {time.time() - t:.0f}s")
+    largest = np.bincount(labels[labels >= 0]).max() if k else 0
+    log(f"hdbscan: {k} clusters, {noise:.1%} noise, largest {largest}, min size {size}, cap {cap}, sample {len(pick)}, in {time.time() - t:.0f}s")
     return labels
 
 
