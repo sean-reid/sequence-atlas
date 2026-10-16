@@ -43,7 +43,11 @@ pub fn compute(terms: &[Term], offset: i32) -> Vec<f32> {
     growth::push(terms, offset, &mut row);
     arith::push(terms, &mut row);
     recur::push(terms, offset, &mut row);
-    debug_assert_eq!(row.len(), columns().len());
+    assert_eq!(
+        row.len(),
+        columns().len(),
+        "feature names and values disagree"
+    );
     row
 }
 

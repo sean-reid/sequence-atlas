@@ -78,11 +78,6 @@ pub fn push(terms: &[Term], _offset: i32, row: &mut Vec<f32>) {
         per.map_or(0.0, |p| 1.0 / p as f64),
         per.is_some() as u8 as f64,
         eventually_constant as u8 as f64,
-        if found {
-            (n as f64 / order.unwrap().max(1) as f64).log10()
-        } else {
-            0.0
-        },
     ] {
         row.push(v as f32);
     }
