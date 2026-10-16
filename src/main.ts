@@ -1,5 +1,7 @@
 import { formatANumber } from "../shared/anumber.ts";
 import {
+  MAX_SCALE,
+  MIN_SCALE,
   formatHash,
   formatPath,
   parseHash,
@@ -20,10 +22,12 @@ const labelsBox = document.getElementById("labels") as HTMLDivElement;
 const hoverBox = document.getElementById("hover") as HTMLDivElement;
 const themeButton = document.getElementById("theme") as HTMLButtonElement;
 const colorButtons = [...document.querySelectorAll<HTMLButtonElement>(".colors button")];
+const colorToggle = document.getElementById("color-toggle") as HTMLButtonElement;
 const legendBox = document.getElementById("legend") as HTMLUListElement;
 const metricButtons = [...document.querySelectorAll<HTMLButtonElement>(".metrics button")];
 
 const data = new DataSource();
+const status = document.getElementById("status") as HTMLParagraphElement;
 const renderer = new MapRenderer(canvas);
 const indexes = new Map<Family, PointIndex>();
 let numbers: Uint32Array<ArrayBufferLike> = new Uint32Array(0);
@@ -39,7 +43,10 @@ new Search({
   list: document.getElementById("results") as HTMLOListElement,
   onPick: (n) => void select(n, true, true),
 });
-panel.onClose = () => void select(null, true);
+panel.onClose = () => {
+  void select(null, true);
+  canvas.focus();
+};
 
 function isDark(): boolean {
   const forced = document.documentElement.dataset.theme;
@@ -66,7 +73,11 @@ function applyPalette(): void {
     }),
   );
   legendBox.hidden = current.legend.length === 0;
-  for (const b of colorButtons) b.classList.toggle("on", b.dataset.color === color);
+  for (const b of colorButtons) {
+    const on = b.dataset.color === color;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
   themeButton.textContent = renderer.dark ? "Light" : "Dark";
   themeButton.setAttribute("aria-label", renderer.dark ? "Switch to light" : "Switch to dark");
 }
@@ -83,7 +94,9 @@ function schedule(): void {
 }
 
 function chromeRects(): [number, number, number, number][] {
-  return [...document.querySelectorAll<HTMLElement>(".top, .tools, .panel, .foot, .legend")]
+  return [
+    ...document.querySelectorAll<HTMLElement>(".top, .tools, .panel, .foot, .legend, .colors"),
+  ]
     .filter((e) => e.checkVisibility())
     .map((e) => {
       const r = e.getBoundingClientRect();
@@ -92,21 +105,24 @@ function chromeRects(): [number, number, number, number][] {
 }
 
 function placeLabels(): void {
-  labelsBox.replaceChildren();
   const current = renderer.family;
-  if (!current || renderer.animating) return;
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
+  if (!current || renderer.animating || drag?.moved) {
+    if (!current || renderer.animating) labelsBox.replaceChildren();
+    return;
+  }
+  const w = renderer.width;
+  const h = renderer.height;
   const placed = chromeRects();
-  const budget = (w < 768 ? 14 : 48) + placed.length;
+  const fragment = document.createDocumentFragment();
+  const budget = (w < 600 ? 8 : w < 1024 ? 20 : 48) + placed.length;
   const seen = new Set<string>();
   for (const c of current.info) {
     if (placed.length >= budget) break;
     if (seen.has(c.label)) continue;
     const [x, y] = renderer.toScreen(c.cx, c.cy);
-    if (x < 0 || y < 0 || x > w || y > h) continue;
     const bw = c.label.length * 6.6 + 8;
     const box: [number, number, number, number] = [x - bw / 2, y - 10, x + bw / 2, y + 10];
+    if (box[0] < 0 || box[1] < 0 || box[2] > w || box[3] > h) continue;
     if (placed.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) {
       continue;
     }
@@ -116,8 +132,19 @@ function placeLabels(): void {
     span.style.left = `${x}px`;
     span.style.top = `${y}px`;
     span.textContent = c.label;
-    labelsBox.append(span);
+    fragment.append(span);
   }
+  labelsBox.replaceChildren(fragment);
+}
+
+// On a phone the panel is a sheet over the lower half, so a centred point
+// moves up into the band between the top bar and the sheet.
+function liftAboveSheet(): void {
+  if (window.innerWidth > 768) return;
+  const top = document.querySelector(".top")?.getBoundingClientRect().bottom ?? 0;
+  const sheetTop = renderer.height - renderer.height * 0.5 - 60;
+  const bandCenter = (top + sheetTop) / 2;
+  renderer.view.y += ((renderer.height / 2 - bandCenter) * 2) / renderer.height;
 }
 
 function indexOfNumber(n: number): number {
@@ -149,11 +176,16 @@ function scheduleHash(): void {
 }
 
 async function showFamily(family: Family, push: boolean): Promise<FamilyData> {
-  const familyData = await data.getFamily(family);
   route = { ...route, family };
+  const familyData = await data.getFamily(family);
+  if (route.family !== family) return familyData;
   renderer.show(familyData);
   if (!indexes.has(family)) indexes.set(family, new PointIndex(familyData.layout));
-  for (const b of metricButtons) b.classList.toggle("on", b.dataset.family === family);
+  for (const b of metricButtons) {
+    const on = b.dataset.family === family;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  }
   if (selectedIndex >= 0)
     void panel.show(numbers[selectedIndex]!, family, familyData, selectedIndex);
   if (push) writeUrl();
@@ -169,7 +201,10 @@ async function select(number: number | null, push: boolean, center = false): Pro
   if (selectedIndex < 0 || number === null) {
     panel.hide();
   } else {
-    if (center) renderer.centerOn(selectedIndex, Math.max(renderer.view.scale, 14));
+    if (center) {
+      renderer.centerOn(selectedIndex, Math.max(renderer.view.scale, 14));
+      liftAboveSheet();
+    }
     void panel.show(number, route.family, familyData, selectedIndex);
   }
   if (push) writeUrl();
@@ -193,13 +228,25 @@ function hover(e: PointerEvent): void {
   hoverBox.style.top = `${e.clientY}px`;
   const c = current.clusters[hit] ?? 65535;
   const label = c === 65535 ? "" : (current.byId.get(c)?.label ?? "");
+  if (hoverBox.dataset.index === String(hit)) return;
   hoverBox.replaceChildren();
   const id = document.createElement("span");
   id.className = "id";
   id.textContent = formatANumber(numbers[hit]!);
-  hoverBox.append(id, label);
+  const name = document.createElement("span");
+  name.textContent = label;
+  hoverBox.append(id, name);
   hoverBox.dataset.index = String(hit);
+  const number = numbers[hit]!;
+  clearTimeout(hoverTimer);
+  hoverTimer = window.setTimeout(() => {
+    void data.getBase(number).then((base) => {
+      if (base && hoverBox.dataset.index === String(hit)) name.textContent = base.name;
+    });
+  }, 120);
 }
+
+let hoverTimer = 0;
 
 for (const b of metricButtons) {
   b.addEventListener("click", () => void showFamily(b.dataset.family as Family, true));
@@ -229,10 +276,20 @@ async function applyColor(): Promise<void> {
   scheduleHash();
 }
 
+function setColorsOpen(open: boolean): void {
+  document.body.classList.toggle("colors-open", open);
+  colorToggle.setAttribute("aria-expanded", String(open));
+}
+
+colorToggle.addEventListener("click", () => {
+  setColorsOpen(!document.body.classList.contains("colors-open"));
+});
+
 for (const b of colorButtons) {
   b.addEventListener("click", () => {
     color = b.dataset.color as Color;
     void applyColor();
+    setColorsOpen(false);
   });
 }
 
@@ -261,7 +318,7 @@ function zoomAt(px: number, py: number, factor: number): void {
   const mx = (px / canvas.clientWidth) * 2 - 1;
   const my = 1 - (py / canvas.clientHeight) * 2;
   const v = renderer.view;
-  const next = Math.min(400, Math.max(0.6, v.scale * factor));
+  const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale * factor));
   const f = next / v.scale;
   v.x = mx - (mx - v.x) * f;
   v.y = my - (my - v.y) * f;
@@ -291,7 +348,7 @@ canvas.addEventListener("pointermove", (e) => {
   if (pinch && pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
-    const target = Math.min(400, Math.max(0.6, (pinch.scale * dist) / pinch.dist));
+    const target = Math.min(MAX_SCALE, Math.max(MIN_SCALE, (pinch.scale * dist) / pinch.dist));
     zoomAt((a!.x + b!.x) / 2, (a!.y + b!.y) / 2, target / renderer.view.scale);
     return;
   }
@@ -330,6 +387,32 @@ canvas.addEventListener("pointercancel", (e) => {
 });
 canvas.addEventListener("pointerleave", () => (hoverBox.hidden = true));
 
+addEventListener("keydown", (e) => {
+  if (
+    e.key === "Escape" &&
+    selectedIndex >= 0 &&
+    document.activeElement?.closest(".search") === null
+  ) {
+    void select(null, true);
+    canvas.focus();
+  }
+});
+
+canvas.addEventListener("keydown", (e) => {
+  const step = 0.1;
+  const v = renderer.view;
+  if (e.key === "ArrowLeft") v.x += step;
+  else if (e.key === "ArrowRight") v.x -= step;
+  else if (e.key === "ArrowUp") v.y -= step;
+  else if (e.key === "ArrowDown") v.y += step;
+  else if (e.key === "+" || e.key === "=") zoomAt(renderer.width / 2, renderer.height / 2, 1.5);
+  else if (e.key === "-") zoomAt(renderer.width / 2, renderer.height / 2, 1 / 1.5);
+  else return;
+  e.preventDefault();
+  schedule();
+  scheduleHash();
+});
+
 addEventListener("resize", () => {
   renderer.resize();
   schedule();
@@ -340,8 +423,12 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
 });
 addEventListener("popstate", () => {
   route = parsePath(location.pathname);
-  const view = parseHash(location.hash);
+  const { color: next, ...view } = parseHash(location.hash);
   Object.assign(renderer.view, view);
+  if (next && next !== color) {
+    color = next;
+    void applyColor();
+  }
   void showFamily(route.family, false).then(() => select(route.number, false));
 });
 
@@ -356,11 +443,22 @@ async function stylesheetReady(): Promise<void> {
 async function start(): Promise<void> {
   await stylesheetReady();
   renderer.resize();
+  // A portrait screen is scaled by width, so the whole map fits on a phone.
+  const aspect = canvas.clientWidth / canvas.clientHeight;
+  if (aspect < 1) renderer.view.scale = Math.max(MIN_SCALE, renderer.view.scale * aspect);
   applyPalette();
   const view = parseHash(location.hash);
   if (view.color) color = view.color;
-  numbers = await data.getNumbers();
-  await showFamily(route.family, false);
+  const [manifest, loadedNumbers] = await Promise.all([
+    data.getManifest(),
+    data.getNumbers(),
+    showFamily(route.family, false),
+  ]);
+  const snapshot = document.getElementById("snapshot");
+  if (snapshot) snapshot.textContent = `, snapshot ${manifest.snapshot}`;
+  numbers = loadedNumbers;
+  void data.getFeatureNames().catch(() => undefined);
+  status.hidden = true;
   if (color !== "cluster") await applyColor();
   if (view.x !== undefined) Object.assign(renderer.view, view);
   if (route.number !== null) await select(route.number, false, view.x === undefined);
@@ -368,4 +466,9 @@ async function start(): Promise<void> {
   document.body.dataset.ready = "1";
 }
 
-void start();
+start().catch((error: unknown) => {
+  console.error(error);
+  const lede = document.querySelector(".lede");
+  if (lede)
+    lede.textContent = "The map could not load. Reload the page, or try a browser with WebGL2.";
+});

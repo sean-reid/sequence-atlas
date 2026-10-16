@@ -39,6 +39,9 @@ export function formatPath(route: Route): string {
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
+export const MIN_SCALE = 0.6;
+export const MAX_SCALE = 60;
+
 export function parseHash(hash: string): Partial<ViewState> {
   const params = new URLSearchParams(hash.replace(/^#/, ""));
   const out: Partial<ViewState> = {};
@@ -49,9 +52,11 @@ export function parseHash(hash: string): Partial<ViewState> {
   const x = num("x");
   const y = num("y");
   const z = num("z");
-  if (x !== undefined) out.x = x;
-  if (y !== undefined) out.y = y;
-  if (z !== undefined && z > 0) out.scale = z;
+  const scale = z === undefined ? 1 : Math.min(MAX_SCALE, Math.max(MIN_SCALE, z));
+  const limit = scale + 1;
+  if (x !== undefined) out.x = Math.min(limit, Math.max(-limit, x));
+  if (y !== undefined) out.y = Math.min(limit, Math.max(-limit, y));
+  if (z !== undefined) out.scale = scale;
   const c = params.get("c");
   if (c && (COLORS as readonly string[]).includes(c)) out.color = c as Color;
   return out;

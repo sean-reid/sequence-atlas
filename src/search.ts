@@ -28,12 +28,23 @@ export class Search {
     const { form, input, list } = deps;
     form.addEventListener("submit", (e) => {
       e.preventDefault();
-      if (this.hits.length) this.pick(this.hits[Math.max(0, this.active)]!.number);
-      else void this.lookup(input.value, true);
+      // A pending debounce means the hits belong to an older query.
+      if (this.timer) {
+        clearTimeout(this.timer);
+        this.timer = 0;
+        void this.lookup(input.value, true);
+      } else if (this.hits.length) {
+        this.pick(this.hits[Math.max(0, this.active)]!.number);
+      } else {
+        void this.lookup(input.value, true);
+      }
     });
     input.addEventListener("input", () => {
       clearTimeout(this.timer);
-      this.timer = window.setTimeout(() => void this.lookup(input.value, false), 180);
+      this.timer = window.setTimeout(() => {
+        this.timer = 0;
+        void this.lookup(input.value, false);
+      }, 180);
     });
     input.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -42,12 +53,16 @@ export class Search {
         this.active = (this.active + step + this.hits.length) % Math.max(1, this.hits.length);
         this.render();
       } else if (e.key === "Escape") {
+        e.preventDefault();
         this.clear();
       }
     });
     input.addEventListener("blur", () => window.setTimeout(() => this.clear(false), 150));
     input.addEventListener("focus", () => {
-      if (this.hits.length) list.hidden = false;
+      if (this.hits.length) {
+        list.hidden = false;
+        document.body.classList.add("results-open");
+      }
     });
   }
 
@@ -85,14 +100,18 @@ export class Search {
       li.textContent = note ?? "Nothing matches.";
       list.append(li);
       list.hidden = false;
+      document.body.classList.add("results-open");
       return;
     }
     this.hits.forEach((hit, i) => {
       const li = document.createElement("li");
+      li.id = `hit-${i}`;
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(i === this.active));
       const button = document.createElement("button");
       button.type = "button";
+      button.tabIndex = -1;
       button.className = i === this.active ? "hit active" : "hit";
-      button.setAttribute("aria-selected", String(i === this.active));
       const id = document.createElement("span");
       id.className = "id";
       id.textContent = formatANumber(hit.number);
@@ -106,9 +125,16 @@ export class Search {
       list.append(li);
     });
     list.hidden = false;
+    document.body.classList.add("results-open");
+    this.deps.input.setAttribute("aria-expanded", "true");
+    if (this.active >= 0)
+      this.deps.input.setAttribute("aria-activedescendant", `hit-${this.active}`);
+    else this.deps.input.removeAttribute("aria-activedescendant");
   }
 
   private pick(number: number): void {
+    clearTimeout(this.timer);
+    this.timer = 0;
     this.deps.input.value = formatANumber(number);
     this.clear(false);
     this.deps.onPick(number);
@@ -117,7 +143,10 @@ export class Search {
 
   clear(reset = true): void {
     this.deps.list.hidden = true;
+    document.body.classList.remove("results-open");
     this.deps.list.replaceChildren();
+    this.deps.input.setAttribute("aria-expanded", "false");
+    this.deps.input.removeAttribute("aria-activedescendant");
     if (reset) {
       this.hits = [];
       this.active = -1;

@@ -6,13 +6,13 @@
     <title>sequence atlas</title>
     <meta
       name="description"
-      content="A map of the OEIS: every integer sequence as a point, near the sequences it is alike."
+      content="A map of the OEIS: every integer sequence as a point, near the sequences like it."
     />
     <meta name="color-scheme" content="dark light" />
     <meta property="og:title" content="sequence atlas" />
     <meta
       property="og:description"
-      content="A map of the OEIS: every integer sequence as a point, near the sequences it is alike."
+      content="A map of the OEIS: every integer sequence as a point, near the sequences like it."
     />
     <meta property="og:image" content="https://sequence-atlas.dwainosaur.com/og.jpg" />
     <meta property="og:image:width" content="1200" />
@@ -43,16 +43,17 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <canvas id="map" aria-label="Map of OEIS sequences"></canvas>
+    <canvas id="map" role="img" tabindex="0" aria-label="Map of OEIS sequences"></canvas>
     <div id="labels" class="labels" aria-hidden="true"></div>
 
     <header class="top">
       <div class="brand">
         <h1 class="wordmark">sequence atlas</h1>
         <p class="lede">
-          Every OEIS sequence as a point, beside the sequences it is alike. Pick a measure, then a
+          Every OEIS sequence as a point, beside the sequences like it. Pick a measure, then a
           point.
         </p>
+        <p class="status" id="status" role="status">Loading the map.</p>
       </div>
       <nav class="metrics" aria-label="Measure of likeness">
         <button type="button" class="on" data-family="all">All</button>
@@ -61,14 +62,14 @@
         <button type="button" data-family="recur">Recurrence</button>
         <button type="button" data-family="graph">References</button>
       </nav>
-      <nav class="colors" aria-label="Color points by">
+      <nav class="colors" id="colors" aria-label="Color points by">
         <span class="colors-label">Color</span>
         <button type="button" class="on" data-color="cluster">Island</button>
         <button type="button" data-color="growth">Growth</button>
         <button type="button" data-color="order">Recurrence order</button>
         <button type="button" data-color="keyword">Keyword</button>
+        <ul class="legend" id="legend" aria-label="Legend" hidden></ul>
       </nav>
-      <ul class="legend" id="legend" hidden></ul>
     </header>
 
     <div class="tools">
@@ -79,18 +80,30 @@
           type="search"
           placeholder="A000045, Fibonacci, or 1, 1, 2, 3, 5"
           autocomplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded="false"
           aria-controls="results"
         />
-        <ol class="results" id="results" hidden></ol>
+        <ol class="results" id="results" role="listbox" hidden></ol>
       </form>
 
+      <button
+        type="button"
+        id="color-toggle"
+        class="color-toggle"
+        aria-expanded="false"
+        aria-controls="colors"
+      >
+        Color
+      </button>
       <button type="button" id="theme" class="theme">Light</button>
     </div>
 
     <aside class="panel" id="panel" aria-label="Selected sequence" hidden>
       <header class="panel-head">
         <p class="anumber" id="p-number"></p>
-        <h2 class="name" id="p-name"></h2>
+        <h2 class="name" id="p-name" tabindex="-1" aria-live="polite"></h2>
         <button type="button" class="close" id="p-close">Close</button>
       </header>
       <p class="terms" id="p-terms"></p>
@@ -100,13 +113,13 @@
       <ol class="near" id="p-near"></ol>
       <p class="oeis"><a id="p-oeis" href="https://oeis.org">at oeis.org</a></p>
     </aside>
-    <div class="hover" id="hover" hidden></div>
+    <div class="hover" id="hover" hidden aria-hidden="true"></div>
 
     <footer class="foot">
       <a href="https://github.com/sean-reid/sequence-atlas">Source</a>
       <span
-        >Data from the <a href="https://oeis.org">OEIS</a>, CC BY-SA 4.0, snapshot 2026-10-15. Not
-        affiliated with the OEIS Foundation.</span
+        >Data from the <a href="https://oeis.org">OEIS</a>, CC BY-SA 4.0<span id="snapshot"></span>.
+        Not affiliated with the OEIS Foundation.</span
       >
     </footer>
 

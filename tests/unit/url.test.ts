@@ -23,6 +23,8 @@ describe("hash", () => {
     const state = { x: 0.25, y: -0.5, scale: 12, color: "order" as const };
     expect(parseHash(formatHash(state))).toEqual(state);
     expect(formatHash({ x: 0, y: 0, scale: 1, color: "cluster" })).toBe("");
-    expect(parseHash("#z=-3&c=bogus")).toEqual({});
+    expect(parseHash("#z=-3&c=bogus")).toEqual({ scale: 0.6 });
+    expect(parseHash("#x=1e308&y=-5&z=1e-9")).toEqual({ x: 1.6, y: -1.6, scale: 0.6 });
+    expect(parseHash("#z=9999")).toEqual({ scale: 60 });
   });
 });

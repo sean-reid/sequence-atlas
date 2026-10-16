@@ -15,7 +15,7 @@ const GROWTH = [
   "linear growth",
   "quadratic growth",
   "cubic or quartic growth",
-  "polynomial growth",
+  "higher polynomial growth",
   "exponential growth",
   "factorial growth or faster",
   "irregular growth",
@@ -57,13 +57,23 @@ export class Panel {
     const near = el<HTMLOListElement>("p-near");
     near.replaceChildren(loading());
 
-    const base: BaseEntry | null = await this.deps.data.getBase(number).catch(() => null);
+    this.root.scrollTop = 0;
+    let failed = false;
+    // The base entry and the neighbour rows key on the same number, so they load together.
+    const neighbours = this.deps.data.getNeighbors(number, family).catch(() => [] as NeighborRow[]);
+    const base: BaseEntry | null = await this.deps.data.getBase(number).catch((error: unknown) => {
+      console.warn(error);
+      failed = true;
+      return null;
+    });
     if (token !== this.token) return;
     const clusterId = familyData.clusters[index];
     const cluster =
       clusterId === undefined || clusterId === 65535 ? null : familyData.byId.get(clusterId);
     if (!base) {
-      el("p-name").textContent = "This snapshot has no details for this sequence.";
+      el("p-name").textContent = failed
+        ? "The details for this sequence did not load."
+        : "This snapshot has no details for this sequence.";
       el("p-summary").textContent = cluster ? `Island: ${cluster.label}.` : "";
       near.replaceChildren();
       return;
@@ -86,7 +96,7 @@ export class Panel {
     el("p-summary").replaceChildren(summary);
 
     const [rows, phrases]: [NeighborRow[], string[]] = await Promise.all([
-      this.deps.data.getNeighbors(number, family).catch(() => []),
+      neighbours,
       this.deps.data
         .getFeatureNames()
         .then((f) => (f[family] ?? []).map((c) => c.phrase))
@@ -123,6 +133,7 @@ export class Panel {
 function loading(): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "loading";
+  li.setAttribute("role", "status");
   li.textContent = "Loading neighbors";
   return li;
 }

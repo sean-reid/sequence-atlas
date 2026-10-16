@@ -83,6 +83,7 @@ export class DataSource {
       .then(fetchOk)
       .then((r) => r.arrayBuffer())
       .then((b) => new Uint8Array(b));
+    this.colors.catch(() => (this.colors = null));
     return this.colors;
   }
 
@@ -111,6 +112,7 @@ export class DataSource {
         };
       })();
       this.families.set(family, pending);
+      pending.catch(() => this.families.delete(family));
     }
     return pending;
   }
@@ -130,6 +132,7 @@ export class DataSource {
         .then(fetchOk)
         .then((r) => r.json() as Promise<Record<string, unknown>>);
       this.shards.set(key, pending);
+      pending.catch(() => this.shards.delete(key));
     }
     return pending;
   }

@@ -33,6 +33,12 @@ const ORDER_BUCKETS: [string, (o: number) => boolean][] = [
   ["order 10 to 12", (o) => o >= 10],
 ];
 
+// Palette slot per recurrence order, 0 to 12, built once from the buckets.
+const ORDER_SLOT = Array.from({ length: 13 }, (_, o) => {
+  const i = ORDER_BUCKETS.findIndex(([, test]) => test(o));
+  return i < 0 ? 0 : i + 1;
+});
+
 const KEYWORDS = ["core", "nice", "hard", "base", "mult", "tabl or tabf", "cons", "easy"];
 
 export function scheme(color: Color, css: (name: string) => string): ColorScheme {
@@ -54,12 +60,9 @@ export function scheme(color: Color, css: (name: string) => string): ColorScheme
         palette: [noise, ...ramp, noise],
         legend: [
           ...ORDER_BUCKETS.map(([label], i) => ({ swatch: ramp[i]!, label })),
-          { swatch: noise, label: "no linear recurrence" },
+          { swatch: noise, label: "none up to order 12" },
         ],
-        slot: (_g, o) => {
-          const i = ORDER_BUCKETS.findIndex(([, test]) => test(o));
-          return i < 0 ? 0 : i + 1;
-        },
+        slot: (_g, o) => ORDER_SLOT[Math.min(o, ORDER_SLOT.length - 1)] ?? 0,
       };
     case "keyword":
       return {
