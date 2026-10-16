@@ -75,60 +75,20 @@
       <button type="button" id="theme" class="theme">Light</button>
     </div>
 
-    <aside class="panel" id="panel" aria-label="Selected sequence">
+    <aside class="panel" id="panel" aria-label="Selected sequence" hidden>
       <header class="panel-head">
-        <p class="anumber">A000045</p>
-        <h2 class="name">Fibonacci numbers: F(n) = F(n-1) + F(n-2) with F(0) = 0 and F(1) = 1.</h2>
-        <button type="button" class="close" aria-label="Close">Close</button>
+        <p class="anumber" id="p-number"></p>
+        <h2 class="name" id="p-name"></h2>
+        <button type="button" class="close" id="p-close">Close</button>
       </header>
-      <p class="terms">
-        0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765,
-        10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, …
-      </p>
-      <p class="keywords">core nonn nice easy hear</p>
-      <p class="summary">
-        Exponential growth at ratio 1.618, a linear recurrence of order 2, differences never settle.
-        In the combined map it sits in the island
-        <span class="cluster">convergents fibonacci continued</span>.
-      </p>
-      <h3 class="near-head">Nearest in the combined map</h3>
-      <ol class="near">
-        <li>
-          <span class="id">A000032</span><span class="nm">Lucas numbers beginning at 2</span
-          ><span class="why">order 2, ratio 1.618</span>
-        </li>
-        <li>
-          <span class="id">A000204</span><span class="nm">Lucas numbers beginning with 1</span
-          ><span class="why">order 2, ratio 1.618</span>
-        </li>
-        <li>
-          <span class="id">A000073</span><span class="nm">Tribonacci numbers</span
-          ><span class="why">order 3, exponential</span>
-        </li>
-        <li>
-          <span class="id">A000930</span><span class="nm">Narayana's cows sequence</span
-          ><span class="why">order 3, exponential</span>
-        </li>
-        <li>
-          <span class="id">A001045</span><span class="nm">Jacobsthal sequence</span
-          ><span class="why">order 2, exponential</span>
-        </li>
-        <li>
-          <span class="id">A000129</span><span class="nm">Pell numbers</span
-          ><span class="why">order 2, exponential</span>
-        </li>
-        <li>
-          <span class="id">A006190</span><span class="nm">a(n) = 3*a(n-1) + a(n-2)</span
-          ><span class="why">order 2, exponential</span>
-        </li>
-        <li>
-          <span class="id">A000285</span
-          ><span class="nm">a(0) = 1, a(1) = 4, and a(n) = a(n-1) + a(n-2)</span
-          ><span class="why">order 2, ratio 1.618</span>
-        </li>
-      </ol>
-      <p class="oeis"><a href="https://oeis.org/A000045">A000045 at oeis.org</a></p>
+      <p class="terms" id="p-terms"></p>
+      <p class="keywords" id="p-keywords"></p>
+      <p class="summary" id="p-summary"></p>
+      <h3 class="near-head" id="p-near-head"></h3>
+      <ol class="near" id="p-near"></ol>
+      <p class="oeis"><a id="p-oeis" href="https://oeis.org">at oeis.org</a></p>
     </aside>
+    <div class="hover" id="hover" hidden></div>
 
     <footer class="foot">
       <a href="https://github.com/sean-reid/sequence-atlas">Source</a>

@@ -19,7 +19,7 @@
   --ink-soft: #9ba3b4;
   --ink-faint: #5b6373;
   --rule: #272c38;
-  --surface: rgb(16 19 27 / 0.84);
+  --surface: rgb(16 19 27 / 0.9);
   --surface-solid: #10131b;
   --focus: #e8eaf0;
   --noise: #2b3040;
@@ -43,7 +43,7 @@
     --ink-soft: #596273;
     --ink-faint: #9aa1ad;
     --rule: #d8dbe3;
-    --surface: rgb(255 255 255 / 0.86);
+    --surface: rgb(255 255 255 / 0.92);
     --surface-solid: #ffffff;
     --focus: #14161c;
     --noise: #c6cad3;
@@ -65,7 +65,7 @@
   --ink-soft: #596273;
   --ink-faint: #9aa1ad;
   --rule: #d8dbe3;
-  --surface: rgb(255 255 255 / 0.86);
+  --surface: rgb(255 255 255 / 0.92);
   --surface-solid: #ffffff;
   --focus: #14161c;
   --noise: #c6cad3;
@@ -230,6 +230,10 @@ select {
   padding: 0 0.6rem;
 }
 
+.panel[hidden] {
+  display: none;
+}
+
 .panel {
   position: fixed;
   z-index: 2;
@@ -240,7 +244,6 @@ select {
   overflow: auto;
   padding: 1.1rem 1.25rem 1.25rem;
   background: var(--surface);
-  backdrop-filter: blur(14px);
   border: 1px solid var(--rule);
   border-radius: 8px;
 }
@@ -319,13 +322,25 @@ select {
 }
 
 .near li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.near .pick {
   display: grid;
   grid-template-columns: 5.2rem 1fr;
   column-gap: 0.6rem;
+  width: 100%;
   padding: 0.55rem 0;
-  border-bottom: 1px solid var(--rule);
   min-height: 44px;
   align-content: center;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.near .pick:hover {
+  background: var(--rule);
 }
 
 .near .id {
@@ -428,7 +443,6 @@ select {
     width: auto;
     height: 52vh;
     background: var(--surface-solid);
-    backdrop-filter: none;
     border-radius: 14px 14px 0 0;
     border-bottom: 0;
     padding-bottom: 2.75rem;
@@ -445,4 +459,31 @@ select {
   .foot span {
     display: none;
   }
+}
+
+.hover {
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+  transform: translate(12px, 12px);
+  padding: 0.3rem 0.5rem;
+  background: var(--surface-solid);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hover .id {
+  font-family: var(--mono);
+  color: var(--ink-soft);
+  margin-right: 0.4rem;
+}
+
+.near li.loading,
+.panel .note {
+  color: var(--ink-faint);
 }
