@@ -15,6 +15,8 @@ pub struct Entry {
     pub number: u32,
     pub name: String,
     pub terms: Vec<Term>,
+    /// The terms as printed in the dump, for display.
+    pub text: Vec<String>,
     pub offset: i32,
     pub keywords: Vec<String>,
     pub xrefs: Vec<u32>,
@@ -33,15 +35,19 @@ pub fn parse_anumber(text: &str) -> Option<u32> {
     rest.parse().ok()
 }
 
-pub fn parse_stripped_line(line: &str) -> Option<(u32, Vec<Term>)> {
+pub fn parse_stripped_line(line: &str) -> Option<(u32, Vec<Term>, Vec<String>)> {
     let (id, body) = line.split_once(' ')?;
     let number = parse_anumber(id)?;
-    let terms = body
+    let text: Vec<String> = body
         .split(',')
         .filter(|s| !s.is_empty())
-        .map(terms::parse)
+        .map(str::to_string)
+        .collect();
+    let terms = text
+        .iter()
+        .map(|s| terms::parse(s))
         .collect::<Option<Vec<_>>>()?;
-    Some((number, terms))
+    Some((number, terms, text))
 }
 
 pub fn load_dumps(stripped: &Path, names: &Path) -> io::Result<Vec<Entry>> {
@@ -51,12 +57,13 @@ pub fn load_dumps(stripped: &Path, names: &Path) -> io::Result<Vec<Entry>> {
         if line.starts_with('#') {
             continue;
         }
-        if let Some((number, terms)) = parse_stripped_line(&line) {
+        if let Some((number, terms, text)) = parse_stripped_line(&line) {
             by_number.insert(
                 number,
                 Entry {
                     number,
                     terms,
+                    text,
                     offset: 1,
                     ..Default::default()
                 },
@@ -167,10 +174,11 @@ mod tests {
 
     #[test]
     fn reads_a_stripped_line() {
-        let (n, terms) = parse_stripped_line("A000045 ,0,1,1,2,3,5,8,").unwrap();
+        let (n, terms, text) = parse_stripped_line("A000045 ,0,1,1,2,3,5,8,").unwrap();
         assert_eq!(n, 45);
         assert_eq!(terms.len(), 7);
         assert_eq!(terms[6].exact, Some(8));
+        assert_eq!(text[6], "8");
     }
 
     #[test]

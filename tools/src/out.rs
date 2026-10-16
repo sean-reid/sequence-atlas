@@ -7,6 +7,9 @@ use std::path::Path;
 use crate::features;
 use crate::oeis::Entry;
 
+/// Terms kept for the detail panel; the dumps hold at most a few hundred characters anyway.
+const SHOWN_TERMS: usize = 60;
+
 pub fn write(dir: &Path, entries: &[Entry], rows: &[Vec<f32>]) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     let cols = features::columns();
@@ -27,16 +30,22 @@ pub fn write(dir: &Path, entries: &[Entry], rows: &[Vec<f32>]) -> io::Result<()>
     c.flush()?;
 
     let mut m = BufWriter::new(File::create(dir.join("meta.tsv"))?);
-    writeln!(m, "number\tnterms\toffset\tkeywords\tname")?;
+    writeln!(m, "number\tnterms\toffset\tkeywords\tname\tterms")?;
     for e in entries {
         writeln!(
             m,
-            "{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}",
             e.number,
             e.terms.len(),
             e.offset,
             e.keywords.join(","),
-            e.name.replace('\t', " ")
+            e.name.replace('\t', " "),
+            e.text
+                .iter()
+                .take(SHOWN_TERMS)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(",")
         )?;
     }
     m.flush()?;

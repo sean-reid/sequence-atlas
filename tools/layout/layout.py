@@ -1,6 +1,6 @@
 """Turn the atlas feature matrix into layouts, clusters, labels, and neighbours.
 
-usage: uv run layout.py <features-dir> <out-dir> [--families a,b,c] [--sample N]
+usage: uv run layout.py <features-dir> <out-dir> [--families a,b,c] [--sample N] [--epochs N]
 
 Embeddings are cached as .npy under the out dir so clustering and labelling can
 be rerun without repeating UMAP.
@@ -27,6 +27,8 @@ KEYWORDS = [
 ]
 SPECTRAL_DIMS = 32
 NEIGHBOURS = 20
+UMAP_K = 15
+KNN_K = NEIGHBOURS + 1
 STOP = set("""
 a an the of for and or with in to on by at is are as that which whose where from into
 than not no if all one two such its this be when then also each any other over under
@@ -128,15 +130,39 @@ def family_matrix(family, X, cols, graph):
     return standardise(X[:, idx])
 
 
-def embed(M, cache):
+def knn_graph(M, cache):
+    """Approximate nearest neighbours in feature space, shared by UMAP and the neighbour lists."""
+    if cache.exists():
+        d = np.load(cache)
+        return d["idx"], d["dist"]
+    from pynndescent import NNDescent
+
+    t = time.time()
+    index = NNDescent(M, n_neighbors=KNN_K, metric="euclidean", n_jobs=-1, verbose=False)
+    idx, dist = index.neighbor_graph
+    log(f"knn on {M.shape} in {time.time() - t:.0f}s")
+    np.savez(cache, idx=idx, dist=dist)
+    return idx, dist
+
+
+def embed(M, knn, cache, epochs):
     if cache.exists():
         return np.load(cache)
     import umap
 
     t = time.time()
-    reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, low_memory=False, verbose=False)
+    reducer = umap.UMAP(
+        n_neighbors=UMAP_K,
+        min_dist=0.1,
+        n_components=2,
+        init="pca",
+        n_epochs=epochs,
+        precomputed_knn=(knn[0][:, :UMAP_K], knn[1][:, :UMAP_K]),
+        low_memory=False,
+        verbose=False,
+    )
     Y = reducer.fit_transform(M).astype(np.float32)
-    log(f"umap on {M.shape} in {time.time() - t:.0f}s")
+    log(f"umap on {M.shape} in {time.time() - t:.0f}s ({epochs} epochs)")
     np.save(cache, Y)
     return Y
 
@@ -187,20 +213,6 @@ def label_clusters(labels, names, keywords):
     return out
 
 
-def neighbours(M, cache):
-    if cache.exists():
-        return np.load(cache)
-    from pynndescent import NNDescent
-
-    t = time.time()
-    index = NNDescent(M, n_neighbors=NEIGHBOURS + 1, metric="euclidean", n_jobs=-1, verbose=False)
-    nn, _ = index.neighbor_graph
-    nn = nn[:, 1:].astype(np.uint32)
-    log(f"knn on {M.shape} in {time.time() - t:.0f}s")
-    np.save(cache, nn)
-    return nn
-
-
 def write_layout(path, Y):
     lo = Y.min(axis=0)
     hi = Y.max(axis=0)
@@ -220,6 +232,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     families = FAMILIES
     sample = 0
+    epochs = 200
     i = 2
     while i < len(args):
         if args[i] == "--families":
@@ -227,6 +240,9 @@ def main():
             i += 2
         elif args[i] == "--sample":
             sample = int(args[i + 1])
+            i += 2
+        elif args[i] == "--epochs":
+            epochs = int(args[i + 1])
             i += 2
         else:
             raise SystemExit(__doc__)
@@ -245,7 +261,8 @@ def main():
     for family in families:
         log(f"== {family}")
         M = family_matrix(family, X, cols, graph)
-        Y = embed(M, out / f"{family}.embedding.npy")
+        knn = knn_graph(M, out / f"{family}.knn.npz")
+        Y = embed(M, knn, out / f"{family}.embedding.npy", epochs)
         labels = cluster(Y)
         label_text = label_clusters(labels, names, keywords)
         write_layout(out / f"{family}.layout.bin", Y)
@@ -256,7 +273,7 @@ def main():
             clusters.append({"id": int(c), "label": " ".join(toks), "size": int(m.sum()), "cx": float(Y[m, 0].mean()), "cy": float(Y[m, 1].mean())})
         clusters.sort(key=lambda c: -c["size"])
         json.dump(clusters, open(out / f"{family}.clusters.json", "w"))
-        nn = neighbours(M, out / f"{family}.nn.npy")
+        nn = knn[0][:, 1:].astype(np.uint32)
         nn.tofile(out / f"{family}.nn.u32")
         sample_nn = {}
         for p in probes:
@@ -270,7 +287,7 @@ def main():
             "neighbours": sample_nn,
         }
     report["seconds"] = round(time.time() - t0)
-    json.dump(report, open(out / "report.json", "w"), indent=1)
+    json.dump(report, open(out / f"report-{'-'.join(families)}.json", "w"), indent=1)
     log(f"done in {report['seconds']}s")
 
 
