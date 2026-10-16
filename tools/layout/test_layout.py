@@ -106,3 +106,24 @@ def test_manifest(tmp_path):
     assert json.loads((tmp_path / "manifest.json").read_text()) == written
     assert written["count"] == 3 and written["families"] == ["growth", "all"] and written["snapshot"] == "2026-10-15"
     assert len(written["version"]) == 8 and written["version"].isdigit()
+
+
+def test_place_new_lands_between_its_neighbours_and_inherits_their_cluster():
+    M = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [10.0, 10.0], [0.3, 0.3]], dtype=np.float32)
+    positions = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0], [50.0, 50.0]], dtype=np.float32)
+    clusters = np.array([7, 7, layout.NOISE, 3], dtype=np.uint16)
+    old = np.arange(4)
+    new = np.array([4])
+    pos, lab = layout.place_new(M, old, new, positions, clusters)
+    assert lab.tolist() == [7]
+    assert 0.0 < pos[0, 0] < 2.0 and 0.0 < pos[0, 1] < 2.0
+    assert np.hypot(*pos[0]) < 5.0
+
+
+def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
+    Y = np.array([[-1.0, 2.0], [3.0, 6.0], [9.0, -9.0]], dtype=np.float32)
+    layout.write_layout(tmp_path / "f.layout.bin", Y, bounds=[-1.0, 2.0, 3.0, 6.0])
+    back, bounds = layout.read_layout(tmp_path / "f.layout.bin")
+    assert bounds.tolist() == [-1.0, 2.0, 3.0, 6.0]
+    assert np.allclose(back[:2], Y[:2], atol=1e-3)
+    assert back[2].tolist() == [3.0, 2.0]

@@ -3,12 +3,16 @@
 usage:
   uv run layout.py embed <features-dir> <out-dir> [--families a,b,c] [--sample N] [--epochs N]
   uv run layout.py shards <features-dir> <out-dir> --snapshot <date>
+  uv run layout.py place <features-dir> <prev-out-dir> <out-dir> --snapshot <date>
 
 embed runs per family and caches the neighbour graph and embedding as .npz and
 .npy under the out dir, so clustering and labelling can be rerun without
 repeating UMAP. shards reads every family's neighbour graph from the out dir
 and writes the per-sequence files the site fetches, with manifest.json
 recording the count, the families, and the OEIS dump date given as --snapshot.
+place is the weekly refresh: sequences missing from the previous out dir are
+put into its layouts at the distance-weighted mean of their nearest old
+neighbours in feature space, then shards runs over everything.
 """
 
 import csv
@@ -447,9 +451,23 @@ def write_shard_dir(path, numbers, groups, entry):
     return raw / len(groups) / 1024, packed / len(groups) / 1024
 
 
-def write_layout(path, Y):
-    lo = Y.min(axis=0)
-    hi = Y.max(axis=0)
+def read_layout(path):
+    """Positions in embedding units and the bounds a layout file was written with."""
+    raw = path.read_bytes()
+    count = struct.unpack_from("<I", raw, 4)[0]
+    bounds = np.array(struct.unpack_from("<4f", raw, 8), dtype=np.float64)
+    q = np.frombuffer(raw[24:], dtype="<u2").reshape(count, 2).astype(np.float64)
+    lo, hi = bounds[:2], bounds[2:]
+    return (lo + q / 65535 * (hi - lo)).astype(np.float32), bounds
+
+
+def write_layout(path, Y, bounds=None):
+    if bounds is None:
+        lo = Y.min(axis=0)
+        hi = Y.max(axis=0)
+    else:
+        lo, hi = np.asarray(bounds[:2]), np.asarray(bounds[2:])
+    Y = np.clip(Y, lo, hi)
     q = np.round((Y - lo) / np.maximum(hi - lo, 1e-9) * 65535).astype(np.uint16)
     with open(path, "wb") as f:
         f.write(b"ATL1")
@@ -561,12 +579,90 @@ def run_shards(features_dir, out, snapshot):
     log(f"done in {time.time() - t0:.0f}s")
 
 
+PLACE_K = 15
+
+
+def place_new(M, old_rows, new_rows, positions, clusters):
+    """Position and cluster for each new row from its nearest old rows in
+    feature space: the distance-weighted mean of their positions and the
+    commonest of their clusters, noise only when every neighbour is noise."""
+    old = M[old_rows].astype(np.float32)
+    old_sq = np.einsum("ij,ij->i", old, old)
+    pos = np.zeros((len(new_rows), 2), dtype=np.float32)
+    lab = np.full(len(new_rows), NOISE, dtype=np.uint16)
+    for start in range(0, len(new_rows), 256):
+        chunk = M[new_rows[start : start + 256]].astype(np.float32)
+        d2 = old_sq[None, :] - 2 * chunk @ old.T + np.einsum("ij,ij->i", chunk, chunk)[:, None]
+        k = min(PLACE_K, len(old_rows))
+        near = np.argpartition(d2, k - 1, axis=1)[:, :k]
+        for r in range(len(chunk)):
+            idx = near[r]
+            w = 1.0 / (np.sqrt(np.maximum(d2[r, idx], 0)) + 1e-6)
+            pos[start + r] = (positions[idx] * w[:, None]).sum(axis=0) / w.sum()
+            votes = clusters[idx]
+            real = votes[votes != NOISE]
+            if len(real):
+                lab[start + r] = np.bincount(real).argmax()
+    return pos, lab
+
+
+def run_place(features_dir, prev, out, snapshot):
+    """Add the sequences the dumps gained since the last run to frozen layouts,
+    then rebuild neighbours and shards for everything."""
+    t0 = time.time()
+    data = load(features_dir)
+    prev_numbers = np.fromfile(prev / "numbers.u32", dtype=np.uint32)
+    families = [f for f in FAMILIES if (prev / f"{f}.layout.bin").exists()]
+    current = {int(n): i for i, n in enumerate(data.numbers)}
+    kept = [int(n) for n in prev_numbers if int(n) in current]
+    known = set(kept)
+    added = sorted(int(n) for n in data.numbers if int(n) not in known)
+    log(f"{len(kept)} kept, {len(prev_numbers) - len(kept)} gone, {len(added)} new")
+    numbers = np.array(kept + added, dtype=np.uint32)
+    data = take(data, [current[int(n)] for n in numbers])
+    old_rows = np.arange(len(kept))
+    new_rows = np.arange(len(kept), len(numbers))
+    prev_index = {int(n): i for i, n in enumerate(prev_numbers)}
+    prev_rows = np.array([prev_index[n] for n in kept], dtype=np.int64)
+    graph = graph_features(numbers, data.keywords, data.xrefs) if needs_graph(families) else None
+    numbers.tofile(out / "numbers.u32")
+    for f in families:
+        M = family_matrix(f, data.X, data.cols, graph)
+        positions, bounds = read_layout(prev / f"{f}.layout.bin")
+        clusters = np.fromfile(prev / f"{f}.cluster.u16", dtype=np.uint16)
+        positions, clusters = positions[prev_rows], clusters[prev_rows]
+        if len(new_rows):
+            pos, lab = place_new(M, old_rows, new_rows, positions, clusters)
+            positions = np.vstack([positions, pos])
+            clusters = np.concatenate([clusters, lab])
+        write_layout(out / f"{f}.layout.bin", positions, bounds)
+        clusters.tofile(out / f"{f}.cluster.u16")
+        info = json.load(open(prev / f"{f}.clusters.json"))
+        sizes = np.bincount(clusters[clusters != NOISE], minlength=len(info))
+        for c in info:
+            c["size"] = int(sizes[c["id"]]) if c["id"] < len(sizes) else 0
+        json.dump(info, open(out / f"{f}.clusters.json", "w"))
+        cache = out / f"{f}.knn.npz"
+        if cache.exists():
+            cache.unlink()
+        knn_graph(M, cache)
+        log(f"{f}: {len(new_rows)} placed, {int((clusters[new_rows] == NOISE).sum()) if len(new_rows) else 0} as noise")
+    log(f"placed in {time.time() - t0:.0f}s")
+    run_shards(features_dir, out, snapshot)
+
+
 def main():
     args = sys.argv[1:]
-    if len(args) < 3 or args[0] not in ("embed", "shards"):
+    if len(args) < 3 or args[0] not in ("embed", "shards", "place"):
         raise SystemExit(__doc__)
     mode = args[0]
     features_dir = Path(args[1])
+    prev = None
+    if mode == "place":
+        if len(args) < 4:
+            raise SystemExit(__doc__)
+        prev = Path(args[2])
+        args = args[:2] + args[3:]
     out = Path(args[2])
     out.mkdir(parents=True, exist_ok=True)
     families = FAMILIES
@@ -584,14 +680,16 @@ def main():
         elif args[i] == "--epochs" and mode == "embed":
             epochs = int(args[i + 1])
             i += 2
-        elif args[i] == "--snapshot" and mode == "shards":
+        elif args[i] == "--snapshot" and mode in ("shards", "place"):
             snapshot = args[i + 1]
             i += 2
         else:
             raise SystemExit(__doc__)
     if mode == "embed":
         run_embed(features_dir, out, families, sample, epochs)
-    elif snapshot:
+    elif mode == "place" and snapshot and prev:
+        run_place(features_dir, prev, out, snapshot)
+    elif mode == "shards" and snapshot:
         run_shards(features_dir, out, snapshot)
     else:
         raise SystemExit(__doc__)
