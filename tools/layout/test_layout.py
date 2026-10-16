@@ -131,3 +131,11 @@ def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
     assert bounds.tolist() == [-1.0, 2.0, 3.0, 6.0]
     assert np.allclose(back[:2], Y[:2], atol=1e-3)
     assert back[2].tolist() == [3.0, 2.0]
+
+
+def test_place_new_with_all_noise_neighbors_stays_noise():
+    M = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]], dtype=np.float32)
+    positions = np.array([[0.0, 0.0], [2.0, 0.0]], dtype=np.float32)
+    clusters = np.array([layout.NOISE, layout.NOISE], dtype=np.uint16)
+    _, lab = layout.place_new(M, np.arange(2), np.array([2]), positions, clusters)
+    assert lab.tolist() == [layout.NOISE]
