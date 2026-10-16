@@ -2,12 +2,13 @@
 
 usage:
   uv run layout.py embed <features-dir> <out-dir> [--families a,b,c] [--sample N] [--epochs N]
-  uv run layout.py shards <features-dir> <out-dir>
+  uv run layout.py shards <features-dir> <out-dir> --snapshot <date>
 
 embed runs per family and caches the neighbour graph and embedding as .npz and
 .npy under the out dir, so clustering and labelling can be rerun without
 repeating UMAP. shards reads every family's neighbour graph from the out dir
-and writes the per-sequence files the site fetches.
+and writes the per-sequence files the site fetches, with manifest.json
+recording the count, the families, and the OEIS dump date given as --snapshot.
 """
 
 import csv
@@ -505,7 +506,13 @@ def run_embed(features_dir, out, families, sample, epochs):
     log(f"done in {report['seconds']}s")
 
 
-def run_shards(features_dir, out):
+def write_manifest(path, count, families, snapshot):
+    manifest = {"version": time.strftime("%Y%m%d"), "count": int(count), "families": list(families), "snapshot": snapshot}
+    json.dump(manifest, open(path, "w"))
+    return manifest
+
+
+def run_shards(features_dir, out, snapshot):
     t0 = time.time()
     numbers = np.fromfile(out / "numbers.u32", dtype=np.uint32)
     data = load(features_dir)
@@ -549,6 +556,7 @@ def run_shards(features_dir, out):
 
         raw, packed = write_shard_dir(out / "shards" / f, numbers, groups, near)
         log(f"shards/{f}: {len(groups)} files, {raw:.1f} KB raw, {packed:.1f} KB gzipped")
+    log(f"manifest: {write_manifest(out / 'manifest.json', len(numbers), families, snapshot)}")
     log(f"done in {time.time() - t0:.0f}s")
 
 
@@ -563,6 +571,7 @@ def main():
     families = FAMILIES
     sample = 0
     epochs = 200
+    snapshot = None
     i = 3
     while i < len(args):
         if args[i] == "--families" and mode == "embed":
@@ -574,12 +583,17 @@ def main():
         elif args[i] == "--epochs" and mode == "embed":
             epochs = int(args[i + 1])
             i += 2
+        elif args[i] == "--snapshot" and mode == "shards":
+            snapshot = args[i + 1]
+            i += 2
         else:
             raise SystemExit(__doc__)
     if mode == "embed":
         run_embed(features_dir, out, families, sample, epochs)
+    elif snapshot:
+        run_shards(features_dir, out, snapshot)
     else:
-        run_shards(features_dir, out)
+        raise SystemExit(__doc__)
 
 
 if __name__ == "__main__":
