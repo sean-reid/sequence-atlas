@@ -24,7 +24,10 @@ test("security headers are set and the inline script is allowed", async ({ reque
   const res = await request.get("/");
   const csp = res.headers()["content-security-policy"] ?? "";
   expect(csp).toContain("default-src 'self'");
-  expect(csp).toMatch(/script-src 'self' 'sha256-[A-Za-z0-9+/=]+'/);
+  expect(csp).toMatch(
+    /script-src 'self' 'sha256-[A-Za-z0-9+/=]+' https:\/\/static\.cloudflareinsights\.com/,
+  );
+  expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com");
   expect(res.headers()["x-content-type-options"]).toBe("nosniff");
 });
 
