@@ -8,3 +8,6 @@ test-results/
 .DS_Store
 *.log
 __pycache__/
+public/data/
+data/
+.pytest_cache/
