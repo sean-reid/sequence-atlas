@@ -54,14 +54,16 @@
     </header>
 
     <div class="tools">
-      <form class="search" role="search" hidden>
+      <form class="search" role="search">
         <label class="visually-hidden" for="q">Find a sequence</label>
         <input
           id="q"
           type="search"
           placeholder="A000045, Fibonacci, or 1, 1, 2, 3, 5"
           autocomplete="off"
+          aria-controls="results"
         />
+        <ol class="results" id="results" hidden></ol>
       </form>
       <label class="colour" hidden>
         <span class="visually-hidden">Colour points by</span>
