@@ -54,7 +54,7 @@
     </header>
 
     <div class="tools">
-      <form class="search" role="search">
+      <form class="search" role="search" hidden>
         <label class="visually-hidden" for="q">Find a sequence</label>
         <input
           id="q"
@@ -63,7 +63,7 @@
           autocomplete="off"
         />
       </form>
-      <label class="colour">
+      <label class="colour" hidden>
         <span class="visually-hidden">Colour points by</span>
         <select id="colour">
           <option value="cluster">Colour: cluster</option>
