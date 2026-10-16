@@ -10,6 +10,24 @@
     "run_worker_first": ["/api/*", "/data/*"],
   },
   "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB_A",
+      "database_name": "sequence-atlas",
+      "database_id": "0a89bffe-ca5a-4499-88a0-b27cbeef47ff",
+      "migrations_dir": "migrations",
+    },
+    {
+      "binding": "DB_B",
+      "database_name": "sequence-atlas-b",
+      "database_id": "bc3ad045-0ce3-4610-a1a8-6b4e11f376de",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "kv_namespaces": [{ "binding": "STATE", "id": "872d67f5602348498d065a9c6ea86439" }],
+  "ratelimits": [
+    { "name": "SEARCH_RATE", "namespace_id": "1", "simple": { "limit": 60, "period": 60 } },
+  ],
   "r2_buckets": [{ "binding": "DATA", "bucket_name": "sequence-atlas" }],
   "workers_dev": true,
   "preview_urls": true,
