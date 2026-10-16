@@ -4,6 +4,7 @@ import type { Family } from "../shared/url.ts";
 
 export interface Manifest {
   version: string;
+  build: string;
   count: number;
   families: Family[];
   snapshot: string;
@@ -61,11 +62,11 @@ export class DataSource {
     return this.manifest;
   }
 
-  // The count changes with every refresh, so stale caches of files that grew
-  // cannot be mixed with the new manifest.
+  // The build id digests every artifact, so a republished file changes its URL
+  // and immutable caches never serve it alongside a newer manifest.
   private async url(path: string): Promise<string> {
-    const { version, count } = await this.getManifest();
-    return `/data/v/${version}/${path}?n=${count}`;
+    const { version, build } = await this.getManifest();
+    return `/data/v/${version}/${path}?b=${build}`;
   }
 
   async getNumbers(): Promise<Uint32Array> {

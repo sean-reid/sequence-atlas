@@ -2,7 +2,7 @@
 // API, sending only objects whose content hash differs from the hashes.json
 // recorded by the previous sync, then writes the new hashes.json last.
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const dir = process.argv[2] ?? "";
@@ -84,5 +84,8 @@ async function worker(): Promise<void> {
   }
 }
 await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-await put(`${prefix}/hashes.json`, Buffer.from(JSON.stringify(next)), "application/json");
+const hashes = Buffer.from(JSON.stringify(next));
+await put(`${prefix}/hashes.json`, hashes, "application/json");
+// The manifest step digests this file into the build id that keys every data URL.
+writeFileSync(join(dir, "hashes.json"), hashes);
 console.log(`uploaded ${done} objects under ${prefix}`);

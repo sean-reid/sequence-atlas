@@ -22,7 +22,13 @@ const numbers = Array.from({ length: COUNT }, (_, i) => i + 1);
 writeFileSync(join(dir, "numbers.u32"), new Uint32Array(numbers));
 writeFileSync(
   join(out, "manifest.json"),
-  JSON.stringify({ version, count: COUNT, families: FAMILIES, snapshot: "2026-01-01" }),
+  JSON.stringify({
+    version,
+    build: "fixture",
+    count: COUNT,
+    families: FAMILIES,
+    snapshot: "2026-01-01",
+  }),
 );
 
 const centers = [

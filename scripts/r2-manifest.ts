@@ -1,6 +1,7 @@
 // Publishes the artifact directory's manifest as the bucket's live manifest,
 // which is the moment the site switches to a new snapshot.
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const dir = process.argv[2] ?? "";
@@ -21,6 +22,14 @@ const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as
   unknown
 >;
 manifest.version = prefix.replace(/^v\//, "");
+const hashes = join(dir, "hashes.json");
+if (!existsSync(hashes)) {
+  console.error(
+    "hashes.json is missing; run r2-sync first so the build id reflects what was uploaded",
+  );
+  process.exit(1);
+}
+manifest.build = createHash("md5").update(readFileSync(hashes)).digest("hex").slice(0, 12);
 const res = await fetch(
   `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/objects/manifest.json`,
   {
@@ -33,4 +42,6 @@ if (!res.ok) {
   console.error(`manifest: ${res.status} ${await res.text()}`);
   process.exit(1);
 }
-console.log(`manifest now points at ${manifest.version} with ${manifest.count} sequences`);
+console.log(
+  `manifest now points at ${manifest.version} build ${manifest.build} with ${manifest.count} sequences`,
+);
