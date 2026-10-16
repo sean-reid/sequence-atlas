@@ -35,17 +35,16 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           working-directory: tools/layout
-      - name: fetch the dumps and the oeisdata checkout
+      # oeis.org refuses downloads from Actions runners; the oeisdata mirror on
+      # GitHub carries the same terms and names.
+      - name: fetch the oeisdata checkout
         run: |
-          mkdir -p data/dumps
-          curl -sSfL --retry 5 -o data/dumps/stripped.gz https://oeis.org/stripped.gz
-          curl -sSfL --retry 5 -o data/dumps/names.gz https://oeis.org/names.gz
           git clone --depth 1 --quiet https://github.com/oeis/oeisdata.git data/oeisdata
-          echo "SNAPSHOT=$(gzip -dc data/dumps/stripped.gz | sed -n 's/^# Last Modified: \(.*\)$/\1/p' | head -1)" >> "$GITHUB_ENV"
+          echo "SNAPSHOT=$(git -C data/oeisdata log -1 --format=%cs)" >> "$GITHUB_ENV"
       - name: compute features
         run: |
           cargo build --release --manifest-path tools/Cargo.toml
-          tools/target/release/atlas features data/dumps/stripped.gz data/dumps/names.gz data/features --oeisdata data/oeisdata
+          tools/target/release/atlas features data/oeisdata data/features
       - name: download the previous artifacts
         run: |
           mkdir -p data/prev

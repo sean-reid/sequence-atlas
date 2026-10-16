@@ -1,11 +1,9 @@
-//! Readers for the OEIS dumps and the oeisdata repository.
+//! Reader for the oeisdata repository, one .seq file per sequence.
 
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader};
-use std::path::Path;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
-use flate2::read::GzDecoder;
 use rayon::prelude::*;
 
 use crate::terms::{self, Term};
@@ -15,16 +13,11 @@ pub struct Entry {
     pub number: u32,
     pub name: String,
     pub terms: Vec<Term>,
-    /// The terms as printed in the dump, for display.
+    /// The terms as printed in the file, for display.
     pub text: Vec<String>,
     pub offset: i32,
     pub keywords: Vec<String>,
     pub xrefs: Vec<u32>,
-}
-
-fn gz_lines(path: &Path) -> io::Result<impl Iterator<Item = io::Result<String>>> {
-    let file = File::open(path)?;
-    Ok(BufReader::new(GzDecoder::new(file)).lines())
 }
 
 pub fn parse_anumber(text: &str) -> Option<u32> {
@@ -35,84 +28,30 @@ pub fn parse_anumber(text: &str) -> Option<u32> {
     rest.parse().ok()
 }
 
-pub fn parse_stripped_line(line: &str) -> Option<(u32, Vec<Term>, Vec<String>)> {
-    let (id, body) = line.split_once(' ')?;
-    let number = parse_anumber(id)?;
-    let text: Vec<String> = body
-        .split(',')
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .collect();
-    let terms = text
-        .iter()
-        .map(|s| terms::parse(s))
-        .collect::<Option<Vec<_>>>()?;
-    Some((number, terms, text))
-}
-
-pub fn load_dumps(stripped: &Path, names: &Path) -> io::Result<Vec<Entry>> {
-    let mut by_number: HashMap<u32, Entry> = HashMap::with_capacity(420_000);
-    for line in gz_lines(stripped)? {
-        let line = line?;
-        if line.starts_with('#') {
-            continue;
-        }
-        if let Some((number, terms, text)) = parse_stripped_line(&line) {
-            by_number.insert(
-                number,
-                Entry {
-                    number,
-                    terms,
-                    text,
-                    offset: 1,
-                    ..Default::default()
-                },
-            );
-        }
-    }
-    for line in gz_lines(names)? {
-        let line = line?;
-        if line.starts_with('#') {
-            continue;
-        }
-        if let Some((id, name)) = line.split_once(' ')
-            && let Some(number) = parse_anumber(id)
-            && let Some(entry) = by_number.get_mut(&number)
-        {
-            entry.name = name.to_string();
-        }
-    }
-    let mut entries: Vec<Entry> = by_number.into_values().collect();
-    entries.sort_by_key(|e| e.number);
-    Ok(entries)
-}
-
-/// Offset, keywords, and cross references from one oeisdata .seq file.
-pub struct SeqMeta {
-    pub offset: i32,
-    pub keywords: Vec<String>,
-    pub xrefs: Vec<u32>,
-}
-
-pub fn parse_seq_file(text: &str, own: u32) -> SeqMeta {
-    let mut meta = SeqMeta {
+/// One .seq file: %S, %T, %U hold the terms, %N the name, %O the offset,
+/// %K the keywords, %Y the cross references.
+pub fn parse_seq_file(text: &str, number: u32) -> Option<Entry> {
+    let mut entry = Entry {
+        number,
         offset: 1,
-        keywords: Vec::new(),
-        xrefs: Vec::new(),
+        ..Default::default()
     };
+    let mut data = String::new();
     for line in text.lines() {
         let Some(rest) = line.get(3..) else { continue };
         let Some((_, body)) = rest.split_once(' ') else {
             continue;
         };
         match &line[..2] {
+            "%S" | "%T" | "%U" => data.push_str(body.trim()),
+            "%N" => entry.name = body.trim().to_string(),
             "%O" => {
                 if let Some(first) = body.split(',').next() {
-                    meta.offset = first.trim().parse().unwrap_or(1);
+                    entry.offset = first.trim().parse().unwrap_or(1);
                 }
             }
             "%K" => {
-                meta.keywords = body
+                entry.keywords = body
                     .split(',')
                     .map(|k| k.trim().to_string())
                     .filter(|k| !k.is_empty())
@@ -129,9 +68,9 @@ pub fn parse_seq_file(text: &str, own: u32) -> SeqMeta {
                             i + 7
                         };
                         if let Ok(n) = body[i + 1..end].parse::<u32>()
-                            && n != own
+                            && n != number
                         {
-                            meta.xrefs.push(n);
+                            entry.xrefs.push(n);
                         }
                         i = end;
                     } else {
@@ -142,30 +81,50 @@ pub fn parse_seq_file(text: &str, own: u32) -> SeqMeta {
             _ => {}
         }
     }
-    meta.xrefs.sort_unstable();
-    meta.xrefs.dedup();
-    meta
+    entry.text = data
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    entry.terms = entry
+        .text
+        .iter()
+        .map(|s| terms::parse(s))
+        .collect::<Option<Vec<_>>>()?;
+    entry.xrefs.sort_unstable();
+    entry.xrefs.dedup();
+    Some(entry)
 }
 
-fn seq_path(dir: &Path, number: u32) -> std::path::PathBuf {
-    let id = format!("A{number:06}");
-    dir.join("seq").join(&id[..4]).join(format!("{id}.seq"))
+fn seq_files(dir: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut files = Vec::with_capacity(420_000);
+    for bucket in fs::read_dir(dir.join("seq"))? {
+        let bucket = bucket?.path();
+        if !bucket.is_dir() {
+            continue;
+        }
+        for file in fs::read_dir(&bucket)? {
+            let file = file?.path();
+            if file.extension().is_some_and(|e| e == "seq") {
+                files.push(file);
+            }
+        }
+    }
+    Ok(files)
 }
 
-pub fn merge_oeisdata(dir: &Path, entries: &mut [Entry]) -> usize {
-    entries
-        .par_iter_mut()
-        .map(|entry| {
-            let Ok(text) = std::fs::read_to_string(seq_path(dir, entry.number)) else {
-                return 0;
-            };
-            let meta = parse_seq_file(&text, entry.number);
-            entry.offset = meta.offset;
-            entry.keywords = meta.keywords;
-            entry.xrefs = meta.xrefs;
-            1
+pub fn load_oeisdata(dir: &Path) -> io::Result<Vec<Entry>> {
+    let files = seq_files(dir)?;
+    let mut entries: Vec<Entry> = files
+        .par_iter()
+        .filter_map(|path| {
+            let number = parse_anumber(path.file_stem()?.to_str()?)?;
+            let text = fs::read_to_string(path).ok()?;
+            parse_seq_file(&text, number)
         })
-        .sum()
+        .collect();
+    entries.sort_by_key(|e| e.number);
+    Ok(entries)
 }
 
 #[cfg(test)]
@@ -173,20 +132,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_a_stripped_line() {
-        let (n, terms, text) = parse_stripped_line("A000045 ,0,1,1,2,3,5,8,").unwrap();
-        assert_eq!(n, 45);
-        assert_eq!(terms.len(), 7);
-        assert_eq!(terms[6].exact, Some(8));
-        assert_eq!(text[6], "8");
+    fn reads_a_seq_file() {
+        let text = "%I A000045 M0692 N0256\n%S A000045 0,1,1,2,3,5,8,\n%T A000045 13,21,34,\n%U A000045 55,89\n%N A000045 Fibonacci numbers.\n%O A000045 0,4\n%K A000045 core,nonn,nice,easy\n%Y A000045 Cf. A000032, A000204 and A000045.\n";
+        let e = parse_seq_file(text, 45).unwrap();
+        assert_eq!(e.name, "Fibonacci numbers.");
+        assert_eq!(e.text.len(), 12);
+        assert_eq!(e.terms[11].exact, Some(89));
+        assert_eq!(e.offset, 0);
+        assert_eq!(e.keywords, vec!["core", "nonn", "nice", "easy"]);
+        assert_eq!(e.xrefs, vec![32, 204]);
     }
 
     #[test]
-    fn reads_seq_metadata() {
-        let text = "%I A000045 M0692 N0256\n%S A000045 0,1,1,2\n%N A000045 Fibonacci numbers.\n%O A000045 0,4\n%K A000045 core,nonn,nice,easy\n%Y A000045 Cf. A000032, A000204 and A000045.\n";
-        let meta = parse_seq_file(text, 45);
-        assert_eq!(meta.offset, 0);
-        assert_eq!(meta.keywords, vec!["core", "nonn", "nice", "easy"]);
-        assert_eq!(meta.xrefs, vec![32, 204]);
+    fn rejects_files_with_unparsable_terms() {
+        assert!(parse_seq_file("%S A000001 1,2,x\n%N A000001 Broken.\n", 1).is_none());
+        assert_eq!(parse_anumber("A000045"), Some(45));
+        assert_eq!(parse_anumber("B000045"), None);
     }
 }
