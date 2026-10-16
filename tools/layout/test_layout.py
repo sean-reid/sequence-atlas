@@ -1,3 +1,4 @@
+import gzip
 import json
 import struct
 
@@ -65,15 +66,18 @@ def test_recurrence_order_is_capped():
 
 
 def test_shard_naming_and_grouping(tmp_path):
+    numbers = np.array([1, 99, 100, 199, 250], dtype=np.uint32)
     assert layout.shard_key(45) == "A000045"
-    assert layout.shard_file(45) == "00000.json"
-    assert layout.shard_file(123456) == "01234.json"
-    numbers = np.array([45, 99, 100, 199, 200], dtype=np.uint32)
+    assert layout.shard_file(250) == "00002.json"
     groups = layout.shard_groups(numbers)
-    assert groups == {"00000.json": [0, 1], "00001.json": [2, 3], "00002.json": [4]}
-    layout.write_shard_dir(tmp_path / "base", numbers, groups, lambda i: int(numbers[i]) * 2)
-    assert sorted(p.name for p in (tmp_path / "base").iterdir()) == ["00000.json", "00001.json", "00002.json"]
-    assert json.loads((tmp_path / "base" / "00001.json").read_text()) == {"A000100": 200, "A000199": 398}
+    assert list(groups) == ["00000.json", "00001.json", "00002.json"]
+    layout.write_shard_pack(tmp_path / "base.pack", numbers, groups, lambda i: int(numbers[i]) * 2)
+    index = json.loads((tmp_path / "base.index.json").read_text())
+    assert list(index) == ["00000", "00001", "00002"]
+    pack = (tmp_path / "base.pack").read_bytes()
+    offset, length = index["00001"]
+    assert json.loads(gzip.decompress(pack[offset : offset + length])) == {"A000100": 200, "A000199": 398}
+    assert sum(length for _, length in index.values()) == len(pack)
 
 
 def test_label_prefers_bigram_over_its_tokens():
@@ -106,3 +110,24 @@ def test_manifest(tmp_path):
     assert json.loads((tmp_path / "manifest.json").read_text()) == written
     assert written["count"] == 3 and written["families"] == ["growth", "all"] and written["snapshot"] == "2026-10-15"
     assert len(written["version"]) == 8 and written["version"].isdigit()
+
+
+def test_place_new_lands_between_its_neighbours_and_inherits_their_cluster():
+    M = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [10.0, 10.0], [0.3, 0.3]], dtype=np.float32)
+    positions = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0], [50.0, 50.0]], dtype=np.float32)
+    clusters = np.array([7, 7, layout.NOISE, 3], dtype=np.uint16)
+    old = np.arange(4)
+    new = np.array([4])
+    pos, lab = layout.place_new(M, old, new, positions, clusters)
+    assert lab.tolist() == [7]
+    assert 0.0 < pos[0, 0] < 2.0 and 0.0 < pos[0, 1] < 2.0
+    assert np.hypot(*pos[0]) < 5.0
+
+
+def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
+    Y = np.array([[-1.0, 2.0], [3.0, 6.0], [9.0, -9.0]], dtype=np.float32)
+    layout.write_layout(tmp_path / "f.layout.bin", Y, bounds=[-1.0, 2.0, 3.0, 6.0])
+    back, bounds = layout.read_layout(tmp_path / "f.layout.bin")
+    assert bounds.tolist() == [-1.0, 2.0, 3.0, 6.0]
+    assert np.allclose(back[:2], Y[:2], atol=1e-3)
+    assert back[2].tolist() == [3.0, 2.0]

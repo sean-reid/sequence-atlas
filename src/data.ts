@@ -61,9 +61,11 @@ export class DataSource {
     return this.manifest;
   }
 
+  // The count changes with every refresh, so stale caches of files that grew
+  // cannot be mixed with the new manifest.
   private async url(path: string): Promise<string> {
-    const { version } = await this.getManifest();
-    return `/data/v/${version}/${path}`;
+    const { version, count } = await this.getManifest();
+    return `/data/v/${version}/${path}?n=${count}`;
   }
 
   async getNumbers(): Promise<Uint32Array> {

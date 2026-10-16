@@ -1,0 +1,70 @@
+name: refresh
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID || '860e267e26cbf52bdca301d114b3c203' }}
+  GENERATION: ${{ vars.ATLAS_GENERATION || 'v/20261015b' }}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools
+      - uses: astral-sh/setup-uv@v7
+        with:
+          working-directory: tools/layout
+      - name: fetch the dumps and the oeisdata checkout
+        run: |
+          mkdir -p data/dumps
+          curl -sSfL --retry 5 -o data/dumps/stripped.gz https://oeis.org/stripped.gz
+          curl -sSfL --retry 5 -o data/dumps/names.gz https://oeis.org/names.gz
+          git clone --depth 1 --quiet https://github.com/oeis/oeisdata.git data/oeisdata
+          echo "SNAPSHOT=$(gzip -dc data/dumps/stripped.gz | sed -n 's/^# Last Modified: \(.*\)$/\1/p' | head -1)" >> "$GITHUB_ENV"
+      - name: compute features
+        run: |
+          cargo build --release --manifest-path tools/Cargo.toml
+          tools/target/release/atlas features data/dumps/stripped.gz data/dumps/names.gz data/features --oeisdata data/oeisdata
+      - name: download the previous artefacts
+        run: |
+          mkdir -p data/prev
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/sequence-atlas/objects/$GENERATION"
+          for f in numbers.u32 growth.layout.bin arith.layout.bin recur.layout.bin graph.layout.bin all.layout.bin \
+                   growth.cluster.u16 arith.cluster.u16 recur.cluster.u16 graph.cluster.u16 all.cluster.u16 \
+                   growth.clusters.json arith.clusters.json recur.clusters.json graph.clusters.json all.clusters.json; do
+            curl -sSf --retry 5 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -o "data/prev/$f" "$base/$f"
+          done
+      - name: place new sequences and rebuild shards
+        working-directory: tools/layout
+        run: |
+          uv sync --locked
+          uv run layout.py place ../../data/features ../../data/prev ../../data/next --snapshot "$SNAPSHOT"
+      - name: upload changed objects
+        run: node scripts/r2-sync.ts data/next "$GENERATION"
+      - name: load the standby search database and flip
+        run: |
+          node scripts/search-sql.ts data/features/meta.tsv data/search.sql
+          node scripts/d1-refresh.ts data/search.sql
+      - name: publish the manifest
+        run: node scripts/r2-manifest.ts data/next "$GENERATION"
