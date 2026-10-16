@@ -13,13 +13,13 @@ if (!source || !out) {
 
 const quote = (s: string) => `'${s.replaceAll("'", "''")}'`;
 
-async function* rows(): AsyncGenerator<[number, string, string]> {
+async function* rows(): AsyncGenerator<[number, string, string, number]> {
   if (source === "--fixture") {
     for (let n = 1; n <= 600; n++) {
       const name =
         n === 45 ? "Fibonacci numbers: F(n) = F(n-1) + F(n-2)." : `Fixture sequence ${n}.`;
       const terms = Array.from({ length: 12 }, (_, k) => String((k + 1) * n)).join(",");
-      yield [n, name, terms];
+      yield [n, name, terms, n === 45 ? 0 : 2];
     }
     return;
   }
@@ -32,23 +32,27 @@ async function* rows(): AsyncGenerator<[number, string, string]> {
     }
     const [number, , , keywords, name, terms] = line.split("\t");
     if (!number || name === undefined) continue;
-    if (keywords?.split(",").includes("dead")) continue;
-    yield [Number(number), name, terms ?? ""];
+    const tags = keywords?.split(",") ?? [];
+    if (tags.includes("dead")) continue;
+    // Famous sequences first: core, then nice, then the rest by A-number.
+    const weight = tags.includes("core") ? 0 : tags.includes("nice") ? 1 : 2;
+    yield [Number(number), name, terms ?? "", weight];
   }
 }
 
 const parts: string[] = ["DELETE FROM seq;"];
 let batch: string[] = [];
 let count = 0;
-for await (const [number, name, terms] of rows()) {
-  batch.push(`(${number},${quote(name)},${quote(terms.replaceAll(",", " "))})`);
+for await (const [number, name, terms, weight] of rows()) {
+  batch.push(`(${number},${quote(name)},${quote(terms.replaceAll(",", " "))},${weight})`);
   count++;
   if (batch.length === BATCH) {
-    parts.push(`INSERT INTO seq (number, name, terms) VALUES ${batch.join(",")};`);
+    parts.push(`INSERT INTO seq (number, name, terms, weight) VALUES ${batch.join(",")};`);
     batch = [];
   }
 }
-if (batch.length) parts.push(`INSERT INTO seq (number, name, terms) VALUES ${batch.join(",")};`);
+if (batch.length)
+  parts.push(`INSERT INTO seq (number, name, terms, weight) VALUES ${batch.join(",")};`);
 parts.push(
   "INSERT INTO name_index(name_index) VALUES ('rebuild');",
   "INSERT INTO terms_index(terms_index) VALUES ('rebuild');",

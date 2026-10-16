@@ -46,7 +46,7 @@ export async function search(env: SearchEnv, raw: string): Promise<SearchRespons
   if (query.kind === "terms") {
     const { results } = await db
       .prepare(
-        "SELECT seq.number, seq.name FROM terms_index JOIN seq ON seq.number = terms_index.rowid WHERE terms_index MATCH ?1 ORDER BY seq.number LIMIT ?2",
+        "SELECT seq.number, seq.name FROM terms_index JOIN seq ON seq.number = terms_index.rowid WHERE terms_index MATCH ?1 ORDER BY seq.weight, seq.number LIMIT ?2",
       )
       .bind(termsMatch(query.terms), LIMIT)
       .all<SearchHit>();
@@ -54,7 +54,7 @@ export async function search(env: SearchEnv, raw: string): Promise<SearchRespons
   }
   const { results } = await db
     .prepare(
-      "SELECT seq.number, seq.name FROM name_index JOIN seq ON seq.number = name_index.rowid WHERE name_index MATCH ?1 ORDER BY rank, seq.number LIMIT ?2",
+      "SELECT seq.number, seq.name FROM name_index JOIN seq ON seq.number = name_index.rowid WHERE name_index MATCH ?1 ORDER BY seq.weight, seq.number LIMIT ?2",
     )
     .bind(nameMatch(query.words), LIMIT)
     .all<SearchHit>();

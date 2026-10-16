@@ -26,6 +26,10 @@ test("resolves an a-number, a name prefix, and a run of terms", async ({ request
   expect(byName.body.kind).toBe("text");
   expect(byName.body.results.map((r) => r.number)).toEqual([45]);
 
+  const weighted = await get(request, "sequence");
+  expect(weighted.body.results[0]?.number).toBe(1);
+  expect(weighted.body.results.length).toBe(20);
+
   const byTerms = await get(request, "4, 6, 8");
   expect(byTerms.body.kind).toBe("terms");
   expect(byTerms.body.results[0]?.number).toBe(2);
