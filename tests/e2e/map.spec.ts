@@ -53,3 +53,22 @@ test("the theme toggle persists", async ({ page }) => {
   await expect(page.locator("body[data-ready]")).toBeVisible();
   await expect(button).not.toHaveText(before ?? "");
 });
+
+test("search lists matches and picking one selects it", async ({ page }) => {
+  await page.route("**/api/search?*", (route) => {
+    const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+    const results = q.startsWith("fib")
+      ? [{ number: 45, name: "Fibonacci numbers: F(n) = F(n-1) + F(n-2)." }]
+      : [];
+    void route.fulfill({ json: { kind: "text", results } });
+  });
+  await page.goto("/");
+  await expect(page.locator("body[data-ready]")).toBeVisible();
+  await page.fill("#q", "fib");
+  await expect(page.locator("#results .hit")).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/A000045/);
+  await expect(page.locator("#p-number")).toHaveText("A000045");
+  await page.fill("#q", "zzz");
+  await expect(page.locator("#results .note")).toHaveText("Nothing matches.");
+});

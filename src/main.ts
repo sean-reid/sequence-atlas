@@ -12,6 +12,7 @@ import { DataSource, type FamilyData } from "./data.ts";
 import { MapRenderer } from "./map.ts";
 import { Panel } from "./panel.ts";
 import { PointIndex } from "./pick.ts";
+import { Search } from "./search.ts";
 
 const canvas = document.getElementById("map") as HTMLCanvasElement;
 const labelsBox = document.getElementById("labels") as HTMLDivElement;
@@ -30,6 +31,12 @@ let selectedIndex = -1;
 renderer.reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const panel = new Panel({ data, onPick: (n) => void select(n, true) });
+new Search({
+  form: document.querySelector(".search") as HTMLFormElement,
+  input: document.getElementById("q") as HTMLInputElement,
+  list: document.getElementById("results") as HTMLOListElement,
+  onPick: (n) => void select(n, true, true),
+});
 panel.onClose = () => void select(null, true);
 
 function isDark(): boolean {
