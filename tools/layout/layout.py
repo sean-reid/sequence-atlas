@@ -40,7 +40,10 @@ a an the of for and or with in to on by at is are as that which whose where from
 than not no if all one two such its this be when then also each any other over under
 number numbers sequence sequences term terms integer integers n k m x y z read rows row
 expansion coefficients coefficient function triangle array table partial sums sum
+satisfies exists form smallest least only more look taken consisting having gives given
+equal equals exactly first using whose into such
 """.split())
+LABEL_WORDS = 3
 TOKEN = re.compile(r"[a-z][a-z'-]{2,}")
 
 
@@ -301,9 +304,30 @@ def cluster(Y):
 
 
 def tokens_for(name, kws):
-    toks = {t for t in TOKEN.findall(name.lower()) if t not in STOP}
+    words = TOKEN.findall(name.lower())
+    toks = {t for t in words if t not in STOP}
+    toks |= {f"{a} {b}" for a, b in zip(words, words[1:]) if a not in STOP and b not in STOP}
     toks |= {f"kw:{k}" for k in kws if k not in ("nonn", "changed", "new", "easy", "sign")}
     return toks
+
+
+def pick_label(scored):
+    """Highest scoring tokens up to LABEL_WORDS words. A bigram is eligible when
+    it scores at least the best single token, and on a tie it comes first."""
+    best_single = max((s for s, t in scored if " " not in t), default=-np.inf)
+    scored = sorted(scored, key=lambda st: (st[0], " " in st[1]), reverse=True)
+    words, out = set(), []
+    for score, tok in scored:
+        parts = tok.split()
+        if len(parts) > 1 and score < best_single:
+            continue
+        if words & set(parts) or len(words) + len(parts) > LABEL_WORDS:
+            continue
+        out.append(tok)
+        words |= set(parts)
+        if len(words) == LABEL_WORDS:
+            break
+    return out
 
 
 def label_clusters(labels, names, keywords):
@@ -329,8 +353,7 @@ def label_clusters(labels, names, keywords):
             p_out = (c_out + 0.5) / (n_out + 1)
             lift = np.log(p_in / p_out)
             scored.append((lift * np.sqrt(c_in / n_in), tok))
-        scored.sort(reverse=True)
-        out[c] = [t.removeprefix("kw:") for _, t in scored[:3]]
+        out[c] = [t.removeprefix("kw:") for t in pick_label(scored)]
     return out
 
 
