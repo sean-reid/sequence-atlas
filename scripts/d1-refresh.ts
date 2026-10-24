@@ -5,14 +5,14 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { config } from "./cloudflare.ts";
 
 const sql = process.argv[2] ?? "";
 if (!sql) {
   console.error("usage: node scripts/d1-refresh.ts <search.sql>");
   process.exit(2);
 }
-const KV_ID = "872d67f5602348498d065a9c6ea86439";
-const DATABASES = { a: "sequence-atlas", b: "sequence-atlas-b" } as const;
+const { kvStateId: KV_ID, databases: DATABASES } = config();
 const CHUNK_STATEMENTS = 800;
 
 function wrangler(...args: string[]): string {

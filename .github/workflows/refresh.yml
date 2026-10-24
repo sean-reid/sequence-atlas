@@ -58,14 +58,7 @@ jobs:
       - name: download the previous artifacts
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          mkdir -p data/prev
-          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/sequence-atlas/objects/$PREVIOUS"
-          for f in numbers.u32 growth.layout.bin arith.layout.bin recur.layout.bin graph.layout.bin all.layout.bin \
-                   growth.cluster.u16 arith.cluster.u16 recur.cluster.u16 graph.cluster.u16 all.cluster.u16 \
-                   growth.clusters.json arith.clusters.json recur.clusters.json graph.clusters.json all.clusters.json; do
-            curl -sSf --retry 5 -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -o "data/prev/$f" "$base/$f"
-          done
+        run: node scripts/r2-pull.ts "$PREVIOUS" data/prev
       - name: place new sequences and rebuild shards
         working-directory: tools/layout
         run: |
