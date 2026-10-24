@@ -165,16 +165,25 @@ def test_manifest(tmp_path):
     assert written["params"] == {"k": 1}
 
 
-def test_place_new_lands_between_its_neighbors_and_inherits_their_cluster():
+def test_place_new_lands_on_the_nearest_neighbor_inside_the_voted_cluster():
+    # Three old rows of cluster 7 on one island and two of cluster 3 on another, far apart in
+    # the layout; the new row sits between them in feature space, so a weighted mean of all
+    # five positions would land in the empty space between the islands.
+    M = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 2.0], [3.0, 2.0], [1.2, 1.0]], dtype=np.float32)
+    positions = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0], [50.0, 50.0], [52.0, 50.0]], dtype=np.float32)
+    clusters = np.array([7, 7, 7, 3, 3], dtype=np.uint16)
+    pos, lab = layout.place_new(M, np.arange(5), np.array([5]), positions, clusters)
+    assert lab.tolist() == [7]
+    assert pos[0].tolist() == [2.0, 0.0]
+
+
+def test_place_new_ignores_noise_neighbors_in_the_vote():
     M = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [10.0, 10.0], [0.3, 0.3]], dtype=np.float32)
     positions = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0], [50.0, 50.0]], dtype=np.float32)
     clusters = np.array([7, 7, fmt.NOISE, 3], dtype=np.uint16)
-    old = np.arange(4)
-    new = np.array([4])
-    pos, lab = layout.place_new(M, old, new, positions, clusters)
+    pos, lab = layout.place_new(M, np.arange(4), np.array([4]), positions, clusters)
     assert lab.tolist() == [7]
-    assert 0.0 < pos[0, 0] < 2.0 and 0.0 < pos[0, 1] < 2.0
-    assert np.hypot(*pos[0]) < 5.0
+    assert pos[0].tolist() == [0.0, 0.0]
 
 
 def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
@@ -186,12 +195,13 @@ def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
     assert back[2].tolist() == [3.0, 2.0]
 
 
-def test_place_new_with_all_noise_neighbors_stays_noise():
+def test_place_new_with_all_noise_neighbors_stays_noise_at_the_weighted_mean():
     M = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]], dtype=np.float32)
     positions = np.array([[0.0, 0.0], [2.0, 0.0]], dtype=np.float32)
     clusters = np.array([fmt.NOISE, fmt.NOISE], dtype=np.uint16)
-    _, lab = layout.place_new(M, np.arange(2), np.array([2]), positions, clusters)
+    pos, lab = layout.place_new(M, np.arange(2), np.array([2]), positions, clusters)
     assert lab.tolist() == [fmt.NOISE]
+    assert np.allclose(pos[0], [1.0, 0.0], atol=1e-4)
 
 
 def tiny_out_dir(tmp_path, n=6):

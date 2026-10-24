@@ -157,8 +157,10 @@ def run_shards(out, snapshot, data, numbers, graph):
 
 def place_new(M, old_rows, new_rows, positions, clusters):
     """Position and cluster for each new row from its nearest old rows in
-    feature space: the distance-weighted mean of their positions and the
-    commonest of their clusters, noise only when every neighbor is noise."""
+    feature space. The cluster is the commonest among the neighbors that have
+    one and the position is that of the nearest neighbor inside it, so the
+    point lands on the island its label names. When every neighbor is noise
+    the row is noise too, at the distance-weighted mean of their positions."""
     old = M[old_rows].astype(np.float32)
     old_sq = np.einsum("ij,ij->i", old, old)
     pos = np.zeros((len(new_rows), 2), dtype=np.float32)
@@ -171,12 +173,16 @@ def place_new(M, old_rows, new_rows, positions, clusters):
         near = np.argpartition(d2, k - 1, axis=1)[:, :k]
         for r in range(len(chunk)):
             idx = near[r]
-            w = 1.0 / (np.sqrt(np.maximum(d2[r, idx], 0)) + PARAMS["place_epsilon"])
-            pos[start + r] = (positions[idx] * w[:, None]).sum(axis=0) / w.sum()
+            dist = np.sqrt(np.maximum(d2[r, idx], 0))
             votes = clusters[idx]
             real = votes[votes != NOISE]
             if len(real):
                 lab[start + r] = np.bincount(real).argmax()
+                inside = np.flatnonzero(votes == lab[start + r])
+                pos[start + r] = positions[idx[inside[dist[inside].argmin()]]]
+            else:
+                w = 1.0 / (dist + PARAMS["place_epsilon"])
+                pos[start + r] = (positions[idx] * w[:, None]).sum(axis=0) / w.sum()
     return pos, lab
 
 
