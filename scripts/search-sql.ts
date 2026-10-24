@@ -1,5 +1,5 @@
-// Emits the SQL that loads the search tables from the feature step's meta.tsv,
-// or a small fixture, in batches D1 accepts.
+// Emits the SQL that loads the search tables from the feature step's meta.tsv
+// in batches D1 accepts.
 import { createReadStream, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 
@@ -7,22 +7,13 @@ const BATCH = 40;
 const source = process.argv[2] ?? "";
 const out = process.argv[3] ?? "";
 if (!source || !out) {
-  console.error("usage: node scripts/search-sql.ts <meta.tsv|--fixture> <out.sql>");
+  console.error("usage: node scripts/search-sql.ts <meta.tsv> <out.sql>");
   process.exit(2);
 }
 
 const quote = (s: string) => `'${s.replaceAll("'", "''")}'`;
 
 async function* rows(): AsyncGenerator<[number, string, string, number]> {
-  if (source === "--fixture") {
-    for (let n = 1; n <= 600; n++) {
-      const name =
-        n === 45 ? "Fibonacci numbers: F(n) = F(n-1) + F(n-2)." : `Fixture sequence ${n}.`;
-      const terms = Array.from({ length: 12 }, (_, k) => String((k + 1) * n)).join(",");
-      yield [n, name, terms, n === 45 ? 0 : 2];
-    }
-    return;
-  }
   const lines = createInterface({ input: createReadStream(source) });
   let first = true;
   for await (const line of lines) {

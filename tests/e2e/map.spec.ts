@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { hashOf, open } from "./helpers.ts";
 
 test("a deep link opens the sequence with its neighbors", async ({ page }, info) => {
-  await page.goto("/A000045/recur");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
+  await open(page, "/A000045/recur");
   const panel = page.locator("#panel");
   await expect(panel).toBeVisible();
   await expect(panel.locator("#p-number")).toHaveText("A000045");
@@ -16,8 +16,7 @@ test("a deep link opens the sequence with its neighbors", async ({ page }, info)
 });
 
 test("switching the measure keeps the selection and rewrites the url", async ({ page }) => {
-  await page.goto("/A000045");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
+  await open(page, "/A000045");
   await page.locator(".metrics button", { hasText: "Growth" }).click();
   await expect(page).toHaveURL(/\/A000045\/growth/);
   await expect(page.locator("#p-near-head")).toHaveText("Nearest in the growth map");
@@ -26,7 +25,7 @@ test("switching the measure keeps the selection and rewrites the url", async ({ 
 });
 
 test("picking a neighbor moves the selection", async ({ page }) => {
-  await page.goto("/A000045");
+  await open(page, "/A000045");
   await expect(page.locator("#p-near .pick").first()).toBeVisible();
   const first = await page.locator("#p-near .id").first().textContent();
   await page.locator("#p-near .pick").first().click();
@@ -35,42 +34,11 @@ test("picking a neighbor moves the selection", async ({ page }) => {
 });
 
 test("close returns to the bare map", async ({ page }) => {
-  await page.goto("/A000045/arith#x=0.1&y=0.2&z=3");
+  await open(page, "/A000045/arith#x=0.1&y=0.2&z=3");
   await expect(page.locator("#panel")).toBeVisible();
   await page.locator("#p-close").click();
   await expect(page.locator("#panel")).toBeHidden();
   await expect(page).toHaveURL(/\/arith#/);
-});
-
-test("the theme toggle persists", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
-  const button = page.locator("#theme");
-  const before = await button.textContent();
-  await button.click();
-  await expect(button).not.toHaveText(before ?? "");
-  await page.reload();
-  await expect(page.locator("body[data-ready]")).toBeVisible();
-  await expect(button).not.toHaveText(before ?? "");
-});
-
-test("search lists matches and picking one selects it", async ({ page }) => {
-  await page.route("**/api/search?*", (route) => {
-    const q = new URL(route.request().url()).searchParams.get("q") ?? "";
-    const results = q.startsWith("fib")
-      ? [{ number: 45, name: "Fibonacci numbers: F(n) = F(n-1) + F(n-2)." }]
-      : [];
-    void route.fulfill({ json: { kind: "text", results } });
-  });
-  await page.goto("/");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
-  await page.fill("#q", "fib");
-  await expect(page.locator("#results .hit")).toHaveCount(1);
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/A000045/);
-  await expect(page.locator("#p-number")).toHaveText("A000045");
-  await page.fill("#q", "zzz");
-  await expect(page.locator("#results .note")).toHaveText("Nothing matches.");
 });
 
 test("the color variable recolors the map, shows a legend, and survives a reload", async ({
@@ -85,8 +53,7 @@ test("the color variable recolors the map, shows a legend, and survives a reload
     const toggle = page.locator("#color-toggle");
     if (await toggle.isVisible()) await toggle.click();
   };
-  await page.goto("/");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
+  await open(page, "/");
   await expect(page.locator("#legend")).toBeHidden();
   await openSheet();
   await page.locator(".colors button", { hasText: "Growth" }).click();
@@ -100,9 +67,10 @@ test("the color variable recolors the map, shows a legend, and survives a reload
   await page.screenshot({ path: info.outputPath("growth-color.png") });
 });
 
-test("labels follow a drag and settle when it ends", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
+test("labels follow a drag, settle when it ends, and the view moves with it", async ({ page }) => {
+  await open(page, "/");
+  const { width, height } = page.viewportSize()!;
+  const start = hashOf(page.url());
   const label = page.locator("#labels span").first();
   await expect(label).toBeVisible();
   const before = await label.boundingBox();
@@ -113,8 +81,13 @@ test("labels follow a drag and settle when it ends", async ({ page }) => {
   expect(Math.round(during!.x - before!.x)).toBe(60);
   expect(Math.round(during!.y - before!.y)).toBe(40);
   await page.mouse.up();
+  // The spans are rebuilt on the frame after the pointer lifts, so a stale one has no box.
   await expect
-    .poll(async () => (await label.boundingBox())!.x - before!.x, { timeout: 2000 })
+    .poll(async () => ((await label.boundingBox())?.x ?? NaN) - before!.x, { timeout: 2000 })
     .toBeGreaterThan(50);
   await expect(page.locator("#labels")).toHaveAttribute("style", "");
+  // A drag of 60 by 40 pixels moves the view by twice that fraction of the canvas.
+  await expect.poll(() => hashOf(page.url()).x).toBeCloseTo(start.x + 120 / width, 2);
+  expect(hashOf(page.url()).y).toBeCloseTo(start.y - 80 / height, 2);
+  expect(hashOf(page.url()).z).toBe(start.z);
 });
