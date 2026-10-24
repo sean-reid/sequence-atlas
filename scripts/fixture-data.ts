@@ -36,7 +36,7 @@ const centers = [
   [3, 4],
   [5, -4],
 ];
-const labels = ["fibonacci lucas", "primes congruent", "decimal expansion"];
+const labels = ["lucas and pell", "primes congruent", "decimal expansion"];
 
 function layout(family: string): void {
   const points = new Uint16Array(COUNT * 2);
@@ -124,6 +124,28 @@ function addShard(kind: string, name: string, doc: unknown): void {
   pack.parts.push(body);
   pack.offset += body.length;
 }
+// One row per sequence feeds both the base shards and meta.tsv, so the stores agree.
+interface Meta {
+  name: string;
+  terms: string;
+  offset: number;
+  keywords: string[];
+  cluster: number | null;
+}
+function meta(n: number): Meta {
+  const c = (n - 1) % 3;
+  return {
+    name:
+      n === 45
+        ? "Fibonacci numbers: F(n) = F(n-1) + F(n-2)."
+        : `Fixture sequence ${n} of ${labels[c]}.`,
+    terms: Array.from({ length: 12 }, (_, k) => String((k + 1) * n)).join(","),
+    offset: 1,
+    keywords: ["nonn", c === 0 ? "core" : "easy"],
+    cluster: n % 50 === 0 ? null : c,
+  };
+}
+
 for (let start = 0; start <= COUNT; start += 100) {
   const name = String(start / 100).padStart(5, "0");
   const baseDoc: Record<string, unknown> = {};
@@ -133,15 +155,10 @@ for (let start = 0; start <= COUNT; start += 100) {
   for (let n = Math.max(1, start); n < start + 100 && n <= COUNT; n++) {
     const id = formatANumber(n);
     const c = (n - 1) % 3;
+    const row = meta(n);
     baseDoc[id] = {
-      name:
-        n === 45
-          ? "Fibonacci numbers: F(n) = F(n-1) + F(n-2)."
-          : `Fixture sequence ${n} of ${labels[c]}.`,
-      terms: Array.from({ length: 12 }, (_, k) => String((k + 1) * n)).join(","),
-      offset: 1,
-      keywords: ["nonn", c === 0 ? "core" : "easy"],
-      cluster: Object.fromEntries(FAMILIES.map((f) => [f, c])),
+      ...row,
+      cluster: Object.fromEntries(FAMILIES.map((f) => [f, row.cluster])),
       color: [c + 1, c === 0 ? 2 : 0, c === 0 ? 1 : 8],
     };
     for (const f of FAMILIES) {
@@ -159,4 +176,13 @@ for (const [kind, pack] of Object.entries(packs)) {
   writeFileSync(join(dir, "shards", `${kind}.pack`), Buffer.concat(pack.parts));
   writeFileSync(join(dir, "shards", `${kind}.index.json`), JSON.stringify(pack.index));
 }
+const tsv = numbers.map((n) => {
+  const row = meta(n);
+  const nterms = row.terms.split(",").length;
+  return [n, nterms, row.offset, row.keywords.join(","), row.name, row.terms].join("\t");
+});
+writeFileSync(
+  join(out, "meta.tsv"),
+  ["number\tnterms\toffset\tkeywords\tname\tterms", ...tsv].join("\n") + "\n",
+);
 console.log(`fixture data for ${COUNT} sequences written to ${out}`);
