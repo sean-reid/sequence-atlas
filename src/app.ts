@@ -56,7 +56,7 @@ export class App {
     addEventListener("keydown", (e) => {
       if (
         e.key === "Escape" &&
-        this.selectedIndex >= 0 &&
+        this.route.number !== null &&
         document.activeElement?.closest(".search") === null
       ) {
         void this.select(null, true);
@@ -129,8 +129,10 @@ export class App {
     if (token !== this.selectToken) return;
     this.selectedIndex = index;
     renderer.selected = index;
-    if (index < 0 || number === null) {
+    if (number === null) {
       panel.hide();
+    } else if (index < 0) {
+      panel.showMissing(number);
     } else {
       if (center) {
         renderer.centerOn(index, Math.max(renderer.view.scale, CENTER_ZOOM));

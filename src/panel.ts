@@ -12,6 +12,8 @@ const FAMILY_NAMES: Record<Family, string> = {
   graph: "references",
 };
 
+const MISSING = "This sequence is not on the map: it is marked dead or has fewer than ten terms.";
+
 const NO_FEATURES: Features = { columns: {}, labels: DEFAULT_LABELS, format: null };
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -35,8 +37,8 @@ export class Panel {
     this.root.hidden = true;
   }
 
-  async show(number: number, family: Family, familyData: FamilyData, index: number): Promise<void> {
-    const token = ++this.token;
+  /** Opens the panel on a number with every field cleared; returns the token for this showing. */
+  private open(number: number): number {
     const id = formatANumber(number);
     this.root.hidden = false;
     el("p-number").textContent = id;
@@ -44,13 +46,25 @@ export class Panel {
     el("p-terms").textContent = "";
     el("p-keywords").textContent = "";
     el("p-summary").textContent = "";
-    el("p-near-head").textContent = `Nearest in the ${FAMILY_NAMES[family]} map`;
+    el("p-near-head").textContent = "";
+    el<HTMLOListElement>("p-near").replaceChildren();
     el<HTMLAnchorElement>("p-oeis").href = `https://oeis.org/${id}`;
     el("p-oeis").textContent = `${id} at oeis.org`;
+    this.root.scrollTop = 0;
+    return ++this.token;
+  }
+
+  /** A number the snapshot left out: dead, or under ten terms. */
+  showMissing(number: number): void {
+    this.open(number);
+    el("p-name").textContent = MISSING;
+  }
+
+  async show(number: number, family: Family, familyData: FamilyData, index: number): Promise<void> {
+    const token = this.open(number);
+    el("p-near-head").textContent = `Nearest in the ${FAMILY_NAMES[family]} map`;
     const near = el<HTMLOListElement>("p-near");
     near.replaceChildren(loading());
-
-    this.root.scrollTop = 0;
     let failed = false;
     // The base entry and the neighbour rows key on the same number, so they load together.
     const neighbours = this.deps.data.getNeighbors(number, family).catch(() => [] as NeighborRow[]);
