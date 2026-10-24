@@ -18,6 +18,10 @@ export interface SearchResponse {
 }
 
 const LIMIT = 20;
+// ORDER BY weight, number sorts every FTS hit before the limit, so the hits
+// that reach it are capped first; a one-letter prefix would match most rows.
+const SCAN = 2_000;
+const MIN_PREFIX = 2;
 const POINTER_TTL_MS = 60_000;
 let pointer: { value: "a" | "b"; at: number } | null = null;
 
@@ -45,18 +49,18 @@ export async function search(env: SearchEnv, raw: string): Promise<SearchRespons
   }
   if (query.kind === "terms") {
     const { results } = await db
-      .prepare(
-        "SELECT seq.number, seq.name FROM terms_index JOIN seq ON seq.number = terms_index.rowid WHERE terms_index MATCH ?1 ORDER BY seq.weight, seq.number LIMIT ?2",
-      )
-      .bind(termsMatch(query.terms), LIMIT)
+      .prepare(matchSql("terms_index"))
+      .bind(termsMatch(query.terms), SCAN, LIMIT)
       .all<SearchHit>();
     return { kind: "terms", results };
   }
+  if (query.words.some((w) => w.length < MIN_PREFIX)) return { kind: "text", results: [] };
   const { results } = await db
-    .prepare(
-      "SELECT seq.number, seq.name FROM name_index JOIN seq ON seq.number = name_index.rowid WHERE name_index MATCH ?1 ORDER BY seq.weight, seq.number LIMIT ?2",
-    )
-    .bind(nameMatch(query.words), LIMIT)
+    .prepare(matchSql("name_index"))
+    .bind(nameMatch(query.words), SCAN, LIMIT)
     .all<SearchHit>();
   return { kind: "text", results };
 }
+
+const matchSql = (index: string): string =>
+  `SELECT seq.number, seq.name FROM (SELECT rowid FROM ${index} WHERE ${index} MATCH ?1 LIMIT ?2) AS hit JOIN seq ON seq.number = hit.rowid ORDER BY seq.weight, seq.number LIMIT ?3`;
