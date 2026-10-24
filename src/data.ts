@@ -136,6 +136,21 @@ export class DataSource {
     return this.numbers;
   }
 
+  /** Position of a sequence in numbers.u32, or -1 when it is not on the map. */
+  async indexOfNumber(number: number): Promise<number> {
+    const numbers = await this.getNumbers();
+    let lo = 0;
+    let hi = numbers.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const v = numbers[mid]!;
+      if (v === number) return mid;
+      if (v < number) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    return -1;
+  }
+
   /** Three bytes per sequence: growth class, recurrence order, keyword group. */
   async getColors(): Promise<Uint8Array> {
     this.colors ??= this.url("color.u8")
