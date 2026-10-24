@@ -2,13 +2,14 @@
 // (min x, min y, max x, max y), then count pairs of uint16 x, y quantized
 // across those bounds. All little endian.
 
-const MAGIC = 0x314c5441;
-const HEADER_BYTES = 24;
+import { HEADER_BYTES, MAGIC, QUANT_MAX } from "./format.ts";
+
+export { HEADER_BYTES, MAGIC };
 
 export interface Layout {
   count: number;
   bounds: [number, number, number, number];
-  /** Interleaved x, y per point in the file's quantized units, 0 to 65535. */
+  /** Interleaved x, y per point in the file's quantized units, 0 to QUANT_MAX. */
   points: Uint16Array;
 }
 
@@ -38,5 +39,5 @@ export function pointAt(layout: Layout, index: number): [number, number] {
   const [x0, y0, x1, y1] = layout.bounds;
   const qx = layout.points[index * 2] ?? 0;
   const qy = layout.points[index * 2 + 1] ?? 0;
-  return [x0 + (qx / 65535) * (x1 - x0), y0 + (qy / 65535) * (y1 - y0)];
+  return [x0 + (qx / QUANT_MAX) * (x1 - x0), y0 + (qy / QUANT_MAX) * (y1 - y0)];
 }

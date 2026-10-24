@@ -1,12 +1,29 @@
+import { NOISE } from "../shared/format.ts";
 import type { FamilyData } from "./data.ts";
+import { HALF_QUANT, Projection, type View } from "./projection.ts";
 
-export interface View {
-  scale: number;
-  x: number;
-  y: number;
+export type { View };
+
+/** Slot 0 is the noise color; the eight after it are the classes. */
+export const PALETTE_SLOTS = 9;
+/** Milliseconds for a layout to morph into the next. */
+export const TRANSITION_MS = 900;
+/** Below this zoom the points overlap enough for additive blending to show density. */
+const ADDITIVE_BELOW_SCALE = 4;
+const POINT_SIZE = { min: 1.4, max: 14, perScale: 1.15 };
+const ADDITIVE_ALPHA = { base: 0.13, perScale: 0.06 };
+const OPAQUE_ALPHA = { base: 0.5, perScale: 0.03, max: 0.92 };
+const SELECTED_RING = { sizeFactor: 3, minPx: 16 };
+
+/** Point diameter in device pixels at a zoom. */
+export function pointSize(scale: number, dpr: number): number {
+  return Math.max(POINT_SIZE.min, Math.min(POINT_SIZE.max, scale * POINT_SIZE.perScale)) * dpr;
 }
 
-const NOISE = 65535;
+export function pointAlpha(scale: number, additive: boolean): number {
+  if (additive) return ADDITIVE_ALPHA.base + scale * ADDITIVE_ALPHA.perScale;
+  return Math.min(OPAQUE_ALPHA.max, OPAQUE_ALPHA.base + scale * OPAQUE_ALPHA.perScale);
+}
 
 const VERTEX = `#version 300 es
 in vec2 p0;
@@ -16,11 +33,11 @@ uniform float t;
 uniform vec2 scale;
 uniform vec2 offset;
 uniform float size;
-uniform vec3 palette[9];
+uniform vec3 palette[${PALETTE_SLOTS}];
 uniform float highlight;
 out vec3 vc;
 void main() {
-  vec2 p = mix(p0, p1, t) / 32767.5 - 1.0;
+  vec2 p = mix(p0, p1, t) / ${HALF_QUANT.toFixed(1)} - 1.0;
   gl_Position = vec4(p * scale + offset, 0.0, 1.0);
   gl_PointSize = size;
   vc = highlight > 0.5 ? palette[0] : palette[int(color)];
@@ -66,11 +83,9 @@ export class MapRenderer {
   private current: FamilyData | null = null;
   private colorSource: ((data: FamilyData) => Float32Array | Uint8Array) | null = null;
   private uniforms = new Map<string, WebGLUniformLocation | null>();
-  private highlightRgb = new Float32Array(27);
-  /** CSS pixel size, cached so drawing and label placement never read layout. */
-  width = 1;
-  height = 1;
-  view: View = { scale: 1.7, x: 0, y: 0 };
+  private highlightRgb = new Float32Array(PALETTE_SLOTS * 3);
+  private paletteCache: Float32Array | null = null;
+  readonly projection = new Projection();
   dark = true;
   reduceMotion = false;
   selected = -1;
@@ -99,15 +114,28 @@ export class MapRenderer {
     this.resize();
   }
 
+  get view(): View {
+    return this.projection.view;
+  }
+
+  get width(): number {
+    return this.projection.width;
+  }
+
+  get height(): number {
+    return this.projection.height;
+  }
+
   get dpr(): number {
     return Math.min(devicePixelRatio, 2);
   }
 
   resize(): void {
-    this.width = this.canvas.clientWidth;
-    this.height = this.canvas.clientHeight;
-    this.canvas.width = Math.round(this.width * this.dpr);
-    this.canvas.height = Math.round(this.height * this.dpr);
+    const width = this.canvas.clientWidth;
+    const height = this.canvas.clientHeight;
+    this.canvas.width = Math.round(width * this.dpr);
+    this.canvas.height = Math.round(height * this.dpr);
+    this.projection.resize(width, height, this.canvas.width / this.canvas.height);
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
@@ -140,7 +168,7 @@ export class MapRenderer {
     const out = new Uint8Array(data.layout.count);
     for (let i = 0; i < out.length; i++) {
       const c = data.clusters[i] ?? NOISE;
-      out[i] = c === NOISE ? 0 : 1 + (c % 8);
+      out[i] = c === NOISE ? 0 : 1 + (c % (PALETTE_SLOTS - 1));
     }
     return out;
   }
@@ -187,29 +215,24 @@ export class MapRenderer {
 
   draw(now: number): void {
     const gl = this.gl;
+    const view = this.view;
     if (this.t < 1) {
-      const raw = Math.min(1, (now - this.tStart) / 900);
+      const raw = Math.min(1, (now - this.tStart) / TRANSITION_MS);
       this.t = raw < 0.5 ? 2 * raw * raw : 1 - Math.pow(-2 * raw + 2, 2) / 2;
     }
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
-    // Additive blending shows density when the whole map is on screen; once
-    // zoomed in the points are separate and additive only bleaches them.
-    const additive = this.dark && this.view.scale < 4;
+    const additive = this.dark && view.scale < ADDITIVE_BELOW_SCALE;
     if (additive) gl.blendFunc(gl.ONE, gl.ONE);
     else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    const aspect = this.canvas.width / this.canvas.height;
     const u = (n: string) => this.uniform(n);
     gl.uniform1f(u("t"), this.t);
-    gl.uniform2f(u("scale"), this.view.scale / aspect, this.view.scale);
-    gl.uniform2f(u("offset"), this.view.x, this.view.y);
-    const size = Math.max(1.4, Math.min(14, this.view.scale * 1.15)) * this.dpr;
+    gl.uniform2f(u("scale"), view.scale / this.projection.aspect, view.scale);
+    gl.uniform2f(u("offset"), view.x, view.y);
+    const size = pointSize(view.scale, this.dpr);
     gl.uniform1f(u("size"), size);
-    gl.uniform1f(
-      u("alpha"),
-      additive ? 0.13 + this.view.scale * 0.06 : Math.min(0.92, 0.5 + this.view.scale * 0.03),
-    );
+    gl.uniform1f(u("alpha"), pointAlpha(view.scale, additive));
     gl.uniform1f(u("highlight"), 0);
     gl.uniform1f(u("ring"), 0);
     gl.drawArrays(gl.POINTS, 0, this.count);
@@ -218,14 +241,16 @@ export class MapRenderer {
       gl.uniform3fv(u("palette"), this.highlightRgb);
       gl.uniform1f(u("highlight"), 1);
       gl.uniform1f(u("alpha"), 1);
-      gl.uniform1f(u("size"), Math.max(size * 3, 16 * this.dpr));
+      gl.uniform1f(
+        u("size"),
+        Math.max(size * SELECTED_RING.sizeFactor, SELECTED_RING.minPx * this.dpr),
+      );
       gl.uniform1f(u("ring"), 1);
       gl.drawArrays(gl.POINTS, this.selected, 1);
       this.restorePalette();
     }
   }
 
-  private paletteCache: Float32Array | null = null;
   private restorePalette(): void {
     if (this.paletteCache) this.gl.uniform3fv(this.uniform("palette"), this.paletteCache);
   }
@@ -244,33 +269,7 @@ export class MapRenderer {
   toScreen(ex: number, ey: number): [number, number] {
     const data = this.current;
     if (!data) return [0, 0];
-    const [x0, y0, x1, y1] = data.layout.bounds;
-    const qx = ((ex - x0) / (x1 - x0)) * 65535;
-    const qy = ((ey - y0) / (y1 - y0)) * 65535;
-    return this.quantizedToScreen(qx, qy);
-  }
-
-  quantizedToScreen(qx: number, qy: number): [number, number] {
-    const aspect = this.canvas.width / this.canvas.height;
-    const nx = qx / 32767.5 - 1;
-    const ny = qy / 32767.5 - 1;
-    const sx = ((nx * this.view.scale) / aspect + this.view.x + 1) / 2;
-    const sy = (1 - (ny * this.view.scale + this.view.y)) / 2;
-    return [sx * this.width, sy * this.height];
-  }
-
-  screenToQuantized(sx: number, sy: number): [number, number] {
-    const aspect = this.canvas.width / this.canvas.height;
-    const cx = (sx / this.width) * 2 - 1;
-    const cy = 1 - (sy / this.height) * 2;
-    const nx = ((cx - this.view.x) * aspect) / this.view.scale;
-    const ny = (cy - this.view.y) / this.view.scale;
-    return [(nx + 1) * 32767.5, (ny + 1) * 32767.5];
-  }
-
-  /** Quantized units per CSS pixel at the current zoom, along y. */
-  unitsPerPixel(): number {
-    return 65536 / (this.height * this.view.scale);
+    return this.projection.toScreen(data.layout.bounds, ex, ey);
   }
 
   /** Center the view on a point index at a given zoom. */
@@ -279,9 +278,6 @@ export class MapRenderer {
     if (!data) return;
     const qx = data.layout.points[index * 2] ?? 0;
     const qy = data.layout.points[index * 2 + 1] ?? 0;
-    const aspect = this.canvas.width / this.canvas.height;
-    this.view.scale = scale;
-    this.view.x = -((qx / 32767.5 - 1) * scale) / aspect;
-    this.view.y = -(qy / 32767.5 - 1) * scale;
+    this.projection.centerOn(qx, qy, scale);
   }
 }

@@ -1,9 +1,10 @@
+import { QUANT_MAX } from "../shared/format.ts";
 import type { Layout } from "../shared/layout.ts";
 
 // Points bucketed on a fixed grid in quantized layout units so a hover
 // only visits the cells under the cursor.
 const CELLS = 256;
-const CELL = 65536 / CELLS;
+const CELL = (QUANT_MAX + 1) / CELLS;
 
 export class PointIndex {
   private starts: Uint32Array;

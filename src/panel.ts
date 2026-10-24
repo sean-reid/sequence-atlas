@@ -1,6 +1,8 @@
 import { formatANumber } from "../shared/anumber.ts";
+import { NOISE } from "../shared/format.ts";
 import type { Family } from "../shared/url.ts";
-import type { BaseEntry, DataSource, FamilyData, NeighborRow } from "./data.ts";
+import { DEFAULT_LABELS } from "./color.ts";
+import type { BaseEntry, DataSource, FamilyData, Features, NeighborRow } from "./data.ts";
 
 const FAMILY_NAMES: Record<Family, string> = {
   all: "combined",
@@ -10,16 +12,9 @@ const FAMILY_NAMES: Record<Family, string> = {
   graph: "references",
 };
 
-const GROWTH = [
-  "constant or periodic",
-  "linear growth",
-  "quadratic growth",
-  "cubic or quartic growth",
-  "higher polynomial growth",
-  "exponential growth",
-  "factorial growth or faster",
-  "irregular growth",
-];
+const MISSING = "This sequence is not on the map: it is marked dead or has fewer than ten terms.";
+
+const NO_FEATURES: Features = { columns: {}, labels: DEFAULT_LABELS, format: null };
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -42,8 +37,8 @@ export class Panel {
     this.root.hidden = true;
   }
 
-  async show(number: number, family: Family, familyData: FamilyData, index: number): Promise<void> {
-    const token = ++this.token;
+  /** Opens the panel on a number with every field cleared; returns the token for this showing. */
+  private open(number: number): number {
     const id = formatANumber(number);
     this.root.hidden = false;
     el("p-number").textContent = id;
@@ -51,25 +46,40 @@ export class Panel {
     el("p-terms").textContent = "";
     el("p-keywords").textContent = "";
     el("p-summary").textContent = "";
-    el("p-near-head").textContent = `Nearest in the ${FAMILY_NAMES[family]} map`;
+    el("p-near-head").textContent = "";
+    el<HTMLOListElement>("p-near").replaceChildren();
     el<HTMLAnchorElement>("p-oeis").href = `https://oeis.org/${id}`;
     el("p-oeis").textContent = `${id} at oeis.org`;
+    this.root.scrollTop = 0;
+    return ++this.token;
+  }
+
+  /** A number the snapshot left out: dead, or under ten terms. */
+  showMissing(number: number): void {
+    this.open(number);
+    el("p-name").textContent = MISSING;
+  }
+
+  async show(number: number, family: Family, familyData: FamilyData, index: number): Promise<void> {
+    const token = this.open(number);
+    el("p-near-head").textContent = `Nearest in the ${FAMILY_NAMES[family]} map`;
     const near = el<HTMLOListElement>("p-near");
     near.replaceChildren(loading());
-
-    this.root.scrollTop = 0;
     let failed = false;
     // The base entry and the neighbour rows key on the same number, so they load together.
     const neighbours = this.deps.data.getNeighbors(number, family).catch(() => [] as NeighborRow[]);
-    const base: BaseEntry | null = await this.deps.data.getBase(number).catch((error: unknown) => {
-      console.warn(error);
-      failed = true;
-      return null;
-    });
+    const [base, features]: [BaseEntry | null, Features] = await Promise.all([
+      this.deps.data.getBase(number).catch((error: unknown) => {
+        console.warn(error);
+        failed = true;
+        return null;
+      }),
+      this.deps.data.getFeatures().catch(() => NO_FEATURES),
+    ]);
     if (token !== this.token) return;
     const clusterId = familyData.clusters[index];
     const cluster =
-      clusterId === undefined || clusterId === 65535 ? null : familyData.byId.get(clusterId);
+      clusterId === undefined || clusterId === NOISE ? null : familyData.byId.get(clusterId);
     if (!base) {
       el("p-name").textContent = failed
         ? "The details for this sequence did not load."
@@ -82,7 +92,7 @@ export class Panel {
     el("p-terms").textContent = base.terms.split(",").join(", ") + ", …";
     el("p-keywords").textContent = base.keywords.join(" ");
     const [growth, order] = base.color;
-    const bits = [GROWTH[growth] ?? ""];
+    const bits = [`${features.labels.growth[growth] ?? "irregular"} growth`];
     if (order > 0) bits.push(`linear recurrence of order ${order}`);
     const summary = document.createElement("span");
     summary.append(bits.filter(Boolean).join(", ") + ". ");
@@ -95,20 +105,12 @@ export class Panel {
     }
     el("p-summary").replaceChildren(summary);
 
-    const [rows, phrases]: [NeighborRow[], string[]] = await Promise.all([
-      neighbours,
-      this.deps.data
-        .getFeatureNames()
-        .then((f) => (f[family] ?? []).map((c) => c.phrase))
-        .catch(() => []),
-    ]);
+    const phrases = (features.columns[family] ?? []).map((c) => c.phrase);
+    const rows = await neighbours;
     if (token !== this.token) return;
     near.replaceChildren();
-    const names = await Promise.all(
-      rows.map((r) => this.deps.data.getBase(r[0]).catch(() => null)),
-    );
-    if (token !== this.token) return;
-    rows.forEach((row, i) => {
+    // Each row's name arrives with its own shard; the rows do not wait for each other.
+    for (const row of rows) {
       const li = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
@@ -119,14 +121,19 @@ export class Panel {
       idSpan.textContent = formatANumber(row[0]);
       const nm = document.createElement("span");
       nm.className = "nm";
-      nm.textContent = names[i]?.name ?? "";
       const why = document.createElement("span");
       why.className = "why";
       why.textContent = [...new Set([phrases[row[1]], phrases[row[2]]].filter(Boolean))].join(", ");
       button.append(idSpan, nm, why);
       li.append(button);
       near.append(li);
-    });
+      void this.deps.data
+        .getBase(row[0])
+        .then((entry) => {
+          if (token === this.token && entry) nm.textContent = entry.name;
+        })
+        .catch(() => undefined);
+    }
   }
 }
 
