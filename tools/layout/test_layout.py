@@ -1,8 +1,12 @@
 import gzip
 import json
+import os
 import struct
+import subprocess
+from pathlib import Path
 
 import numpy as np
+import pytest
 
 import layout
 from atlas import codes, embed, features
@@ -22,40 +26,6 @@ COLOR_COLUMNS = [
     "r_period",
     "r_eventually_constant",
 ]
-
-# Feature values the Rust tool computes for A000012, A000290, A000079, A000142.
-ONES = {"r_order": 1, "r_found": 1, "r_diff_degree": 1, "r_poly": 1, "r_period": 1, "r_eventually_constant": 1}
-SQUARES = {
-    "g_poly_slope": 2.0,
-    "g_exp_slope": 0.048,
-    "g_exp_resid": 0.319,
-    "g_fact_resid": 0.385,
-    "g_ratio_trend": -0.004,
-    "r_order": 3,
-    "r_found": 1,
-    "r_diff_degree": 3,
-    "r_poly": 1,
-}
-POWERS_OF_TWO = {
-    "g_poly_slope": 6.784,
-    "g_poly_resid": 1.242,
-    "g_exp_slope": 0.302,
-    "g_exp_resid": 0.048,
-    "g_fact_resid": 0.391,
-    "r_order": 1,
-    "r_found": 1,
-    "r_diff_degree": 11,
-}
-FACTORIALS = {
-    "g_poly_slope": 14.859,
-    "g_poly_resid": 3.3,
-    "g_exp_slope": 1.014,
-    "g_exp_resid": 0.844,
-    "g_fact_resid": 0.092,
-    "g_ratio_trend": 0.051,
-    "r_order": 13,
-    "r_diff_degree": 11,
-}
 
 
 def rows(*values):
@@ -88,15 +58,40 @@ def test_explain_picks_shared_extreme_columns():
     assert embed.explain(Z, nn)[0].tolist() == [[0, 1], [2, 1]]
 
 
-def test_color_codes_for_known_sequences():
-    cols = [("test", name) for name in COLOR_COLUMNS]
-    X = rows(ONES, SQUARES, POWERS_OF_TWO, FACTORIALS)
-    keywords = [["nonn", "core", "easy", "mult"], ["nonn", "tabl", "easy"], ["hard", "nonn"], ["nonn"]]
-    c = codes.color_codes(X, cols, keywords)
-    assert c.dtype == np.uint8 and c.shape == (4, 3)
-    assert c[:, 0].tolist() == [0, 2, 5, 6]
-    assert c[:, 1].tolist() == [1, 3, 1, 0]
-    assert c[:, 2].tolist() == [1, 6, 3, 0]
+FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "oeisdata"
+ATLAS_BIN = Path(os.environ.get("ATLAS_BIN", Path(__file__).resolve().parents[1] / "target" / "release" / "atlas"))
+
+
+@pytest.fixture(scope="session")
+def fixture_features(tmp_path_factory):
+    """Feature output of the release binary over the twelve committed .seq files."""
+    if not ATLAS_BIN.exists():
+        pytest.fail(f"{ATLAS_BIN} is missing; run cargo build --release in tools or set ATLAS_BIN")
+    out = tmp_path_factory.mktemp("features")
+    subprocess.run([str(ATLAS_BIN), "features", str(FIXTURE), str(out)], check=True, capture_output=True)
+    return out
+
+
+def test_meta_header_matches_what_load_expects(fixture_features):
+    header = (fixture_features / "meta.tsv").read_text().splitlines()[0].split("\t")
+    assert header == features.META_HEADER
+
+
+def test_color_codes_for_known_sequences(fixture_features):
+    data = features.load(fixture_features)
+    c = codes.color_codes(data.X, data.cols, data.keywords)
+    assert c.dtype == np.uint8 and c.shape == (12, 3)
+    by_number = {int(n): row.tolist() for n, row in zip(data.numbers, c, strict=True)}
+    assert by_number[12] == [0, 1, 1]
+    assert by_number[290] == [2, 3, 1]
+    assert by_number[79] == [5, 1, 1]
+    assert by_number[142] == [6, 0, 1]
+    assert [codes.GROWTH_CLASSES[by_number[n][0]] for n in (27, 578, 108, 110)] == [
+        "linear",
+        "cubic or quartic",
+        "exponential",
+        "factorial",
+    ]
 
 
 def test_recurrence_order_is_capped():

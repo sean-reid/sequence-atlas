@@ -74,6 +74,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --release -- -D warnings
       - run: cargo test --release
+      - run: cargo build --release
       - uses: astral-sh/setup-uv@v7
         with:
           working-directory: tools/layout

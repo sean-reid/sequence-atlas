@@ -1,0 +1,19 @@
+%I A001477 #335 Aug 01 2026 09:57:53
+%S A001477 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,
+%T A001477 26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,
+%U A001477 49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77
+%N A001477 The nonnegative integers.
+%Y A001477 Cf. A000027 (n>=1).
+%Y A001477 Cf. A000012 (first differences).
+%Y A001477 Partial sums of A057427. - _Jeremy Gardiner_, Sep 08 2002
+%Y A001477 Cf. A038608 (alternating signs), A001787 (binomial transform).
+%Y A001477 Cf. A055112.
+%Y A001477 Cf. Boustrophedon transforms: A231179, A000737.
+%Y A001477 Cf. A245422.
+%Y A001477 Number of orbits of Aut(Z^7) as function of the infinity norm A000579, A154286, A102860, A002412, A045943, A115067, A008586, A008585, A005843, A000217.
+%Y A001477 When written as an array, the rows/columns are A000217, A000124, A152948, A152950, A145018, A167499, A166136, A167487... and A000096, A034856, A055998, A046691, A052905, A055999... (with appropriate offsets); cf. analogous lists for A000027 in A185787.
+%Y A001477 Cf. A000290.
+%Y A001477 Cf. A061579 (transposed matrix / reversed triangle).
+%Y A001477 Cf. A000578.
+%K A001477 core,nonn,easy,mult,tabl
+%O A001477 0,3
