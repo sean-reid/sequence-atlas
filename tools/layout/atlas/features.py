@@ -84,7 +84,6 @@ PHRASES = {
     "r_period": "period",
     "r_periodic": "periodic",
     "r_eventually_constant": "eventually constant",
-    "degree": "number of cross references",
 }
 
 
@@ -177,7 +176,9 @@ def graph_features(numbers, keywords, xrefs):
     order = np.argsort(-vals)
     vals, vecs = vals[order][1:], vecs[:, order][:, 1:]
     log(f"spectral embedding in {time.time() - t:.0f}s, eigenvalues {vals[0]:.3f}..{vals[-1]:.3f}")
-    spec = vecs * np.sqrt(np.maximum(vals, 0))
+    # Rows scaled by 1/sqrt(deg + tau) are the random walk eigenvectors, which
+    # put a sequence by whom it is cited rather than by how often.
+    spec = vecs * np.sqrt(np.maximum(vals, 0)) * dinv[:, None]
     spec = spec / (spec.std(axis=0) + 1e-12)
     K = np.zeros((n, len(KEYWORDS)), dtype=np.float32)
     kwi = {k: i for i, k in enumerate(KEYWORDS)}
@@ -185,8 +186,7 @@ def graph_features(numbers, keywords, xrefs):
         for k in kws:
             if k in kwi:
                 K[i, kwi[k]] = 1.0
-    degree = np.log1p(deg)[:, None].astype(np.float32)
-    return np.hstack([spec.astype(np.float32), K * PARAMS["keyword_weight"], degree])
+    return np.hstack([spec.astype(np.float32), K * PARAMS["keyword_weight"]])
 
 
 def needs_graph(families):
@@ -209,7 +209,7 @@ def phrase(column):
 
 
 def family_columns(family, cols):
-    graph_cols = [f"spec{i}" for i in range(SPECTRAL_DIMS)] + [f"kw_{k}" for k in KEYWORDS] + ["degree"]
+    graph_cols = [f"spec{i}" for i in range(SPECTRAL_DIMS)] + [f"kw_{k}" for k in KEYWORDS]
     if family == "graph":
         return graph_cols
     numeric = [c[1] for c in cols if c[0] in ("growth", "arith", "recur")]

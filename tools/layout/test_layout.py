@@ -152,8 +152,8 @@ def test_feature_names_follow_the_family_matrix_columns():
     names = features.feature_names(["recur", "graph"], cols)
     assert names["recur"] == [{"name": "r_order", "phrase": "recurrence order"}]
     assert names["graph"][0] == {"name": "spec0", "phrase": "cross-reference community"}
-    assert names["graph"][-1] == {"name": "degree", "phrase": "number of cross references"}
-    assert len(names["graph"]) == features.SPECTRAL_DIMS + len(features.KEYWORDS) + 1
+    assert names["graph"][-1] == {"name": "kw_word", "phrase": "keyword word"}
+    assert len(names["graph"]) == features.SPECTRAL_DIMS + len(features.KEYWORDS)
     assert all(" " not in n["name"] and "_" not in n["phrase"] for f in names.values() for n in f)
 
 
@@ -235,3 +235,26 @@ def test_features_json_publishes_labels_and_format_beside_the_columns(tmp_path):
     assert manifest["params"] == embed.PARAMS and manifest["count"] == 6
     index = json.loads((tmp_path / "shards" / "base.index.json").read_text())
     assert list(index) == ["00000"]
+
+
+def test_graph_features_place_a_node_by_its_neighbors_not_its_degree():
+    # Two cliques of four joined by one bridge edge, plus a hub cited by every node of
+    # both. The hub's row must not stand apart from the cliques, and the two cliques
+    # must separate along the leading column.
+    numbers = np.arange(1, 10, dtype=np.uint32)
+    edges = [(a, b) for a in range(1, 5) for b in range(a + 1, 5)]
+    edges += [(a, b) for a in range(5, 9) for b in range(a + 1, 9)]
+    edges += [(4, 5)] + [(i, 9) for i in range(1, 9)]
+    old = features.SPECTRAL_DIMS
+    features.SPECTRAL_DIMS = 2
+    try:
+        G = features.graph_features(numbers, [["core"]] + [[]] * 8, np.array(edges, dtype=np.uint32))
+    finally:
+        features.SPECTRAL_DIMS = old
+    assert G.shape == (9, 2 + len(features.KEYWORDS))
+    spec = G[:, :2]
+    assert np.sign(spec[:4, 0]).tolist() != np.sign(spec[4:8, 0]).tolist()
+    hub_gap = np.linalg.norm(spec[8] - spec[:8].mean(axis=0))
+    clique_gap = np.linalg.norm(spec[:4].mean(axis=0) - spec[4:8].mean(axis=0))
+    assert hub_gap < clique_gap
+    assert G[0, 2 + features.KEYWORDS.index("core")] == embed.PARAMS["keyword_weight"]
