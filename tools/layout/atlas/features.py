@@ -208,22 +208,57 @@ def phrase(column):
     return {"a_entropy": "balance", "a_top_share": "bias", "a_period": "period"}[kind] + f" mod {modulus}"
 
 
+COMBINED_ORDER = ["growth", "arith", "recur", "graph"]
+
+
+def graph_columns():
+    return [f"spec{i}" for i in range(SPECTRAL_DIMS)] + [f"kw_{k}" for k in KEYWORDS]
+
+
+def combined_blocks(cols):
+    """Column indexes of each numeric block of the combined matrix. The arithmetic
+    block loses the top share of every modulus, which is the negative of its
+    entropy, and the moduli that repeat a smaller one."""
+    drop = {f"mod{m}" for m in PARAMS["combined_drop_moduli"]}
+    arith = [
+        i
+        for i, (family, name) in enumerate(cols)
+        if family == "arith" and not name.startswith("a_top_share") and name.rpartition("_")[2] not in drop
+    ]
+    return {
+        "growth": [i for i, c in enumerate(cols) if c[0] == "growth"],
+        "arith": arith,
+        "recur": [i for i, c in enumerate(cols) if c[0] == "recur"],
+    }
+
+
 def family_columns(family, cols):
-    graph_cols = [f"spec{i}" for i in range(SPECTRAL_DIMS)] + [f"kw_{k}" for k in KEYWORDS]
     if family == "graph":
-        return graph_cols
-    numeric = [c[1] for c in cols if c[0] in ("growth", "arith", "recur")]
+        return graph_columns()
     if family == "all":
-        return numeric + graph_cols
+        blocks = combined_blocks(cols)
+        return [cols[i][1] for b in COMBINED_ORDER[:3] for i in blocks[b]] + graph_columns()
     return [c[1] for c in cols if c[0] == family]
+
+
+def combined_matrix(X, cols, graph):
+    """Each block scaled so its share of the summed column variance matches
+    PARAMS["combined_weights"]; the scales used land in PARAMS["combined_scales"]."""
+    blocks = {name: standardize(X[:, idx]) for name, idx in combined_blocks(cols).items()}
+    blocks["graph"] = graph
+    weights = PARAMS["combined_weights"]
+    weight_total = sum(weights.values())
+    variance = {name: float(block.astype(np.float64).var(axis=0).sum()) for name, block in blocks.items()}
+    variance_total = sum(variance.values())
+    scales = {n: float(np.sqrt((weights[n] / weight_total) / (variance[n] / variance_total))) for n in blocks}
+    PARAMS["combined_scales"] = {n: round(scales[n], 4) for n in COMBINED_ORDER}
+    return np.hstack([blocks[n] * np.float32(scales[n]) for n in COMBINED_ORDER])
 
 
 def family_matrix(family, X, cols, graph):
     if family == "graph":
         return graph
     if family == "all":
-        parts = [standardize(X[:, [i for i, c in enumerate(cols) if c[0] == f]]) for f in ("growth", "arith", "recur")]
-        parts.append(graph * PARAMS["graph_weight"])
-        return np.hstack(parts)
+        return combined_matrix(X, cols, graph)
     idx = [i for i, c in enumerate(cols) if c[0] == family]
     return standardize(X[:, idx])

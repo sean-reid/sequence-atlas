@@ -1,4 +1,5 @@
 import gzip
+import itertools
 import json
 import os
 import struct
@@ -253,3 +254,40 @@ def test_graph_features_place_a_node_by_its_neighbors_not_its_degree():
     clique_gap = np.linalg.norm(spec[:4].mean(axis=0) - spec[4:8].mean(axis=0))
     assert hub_gap < clique_gap
     assert G[0, 2 + features.KEYWORDS.index("core")] == embed.PARAMS["keyword_weight"]
+
+
+def test_combined_matrix_hits_the_target_block_shares():
+    rng = np.random.default_rng(5)
+    n = 4000
+    cols = [("growth", f"g_{i}") for i in range(19)]
+    cols += [
+        ("arith", f"a_{k}_mod{m}") for m in (2, 3, 4, 5, 6, 7, 8, 9, 10, 16) for k in ("entropy", "top_share", "period")
+    ]
+    cols += [("arith", f"a_{s}") for s in ("frac_prime", "frac_distinct", "frac_square", "gcd_log", "frac_even")]
+    cols += [("recur", f"r_{i}") for i in range(9)]
+    X = (rng.normal(size=(n, len(cols))) * rng.uniform(0.1, 30, size=len(cols))).astype(np.float32)
+    graph = np.hstack([rng.normal(size=(n, 32)), rng.uniform(size=(n, 25)) < 0.2]).astype(np.float32)
+    kept = features.combined_blocks(cols)
+    assert len(kept["arith"]) == 7 * 2 + 5 and len(kept["growth"]) == 19 and len(kept["recur"]) == 9
+    assert all(
+        "top_share" not in cols[i][1] and not cols[i][1].endswith(("mod4", "mod6", "mod10")) for i in kept["arith"]
+    )
+    saved = embed.PARAMS["combined_weights"]
+    embed.PARAMS["combined_weights"] = {"growth": 0.35, "recur": 0.25, "arith": 0.25, "graph": 0.15}
+    try:
+        M = features.family_matrix("all", X, cols, graph)
+    finally:
+        embed.PARAMS["combined_weights"] = saved
+    names = features.family_columns("all", cols)
+    assert M.shape == (n, len(names)) and names[-1] == "kw_word" and names[19] == "a_entropy_mod2"
+    var = M.astype(np.float64).var(axis=0)
+    edges = np.cumsum([0, 19, 19, 9, 57])
+    shares = [var[a:b].sum() / var.sum() for a, b in itertools.pairwise(edges)]
+    assert np.allclose(shares, [0.35, 0.25, 0.25, 0.15], atol=0.02)
+    assert set(embed.PARAMS["combined_scales"]) == {"growth", "arith", "recur", "graph"}
+
+
+def test_weights_flag_overrides_only_the_named_families():
+    assert layout.parse_weights("growth=0.5,graph=0.1") == {"growth": 0.5, "recur": 0.25, "arith": 0.25, "graph": 0.1}
+    with pytest.raises(Exception, match="unknown family"):
+        layout.parse_weights("spectral=1")

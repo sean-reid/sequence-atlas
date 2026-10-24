@@ -32,8 +32,9 @@ PARAMS = {
     "place_k": 15,
     "eigsh_tol": 1e-4,
     "keyword_weight": 1.5,
-    "graph_weight": 0.5,
     "clip_percentile": 0.5,
+    "combined_weights": {"growth": 0.25, "recur": 0.25, "arith": 0.25, "graph": 0.25},
+    "combined_drop_moduli": [4, 6, 10],
 }
 KNN_K = NEIGHBORS + 1
 LABEL_WORDS = 3

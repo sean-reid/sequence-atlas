@@ -239,6 +239,17 @@ def run_place(features_dir, prev, out, snapshot):
     run_shards(out, snapshot, data, numbers, graph)
 
 
+def parse_weights(text):
+    """growth=0.35,recur=0.25,... over the default combined weights."""
+    weights = dict(PARAMS["combined_weights"])
+    for part in text.split(","):
+        name, _, value = part.partition("=")
+        if name not in weights:
+            raise argparse.ArgumentTypeError(f"unknown family {name!r}; choose from {', '.join(weights)}")
+        weights[name] = float(value)
+    return weights
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -248,6 +259,7 @@ def main():
     embed_cmd.add_argument("--families", default=",".join(FAMILIES))
     embed_cmd.add_argument("--sample", type=int, default=0)
     embed_cmd.add_argument("--epochs", type=int, default=200)
+    embed_cmd.add_argument("--weights", type=parse_weights, help="combined matrix targets, growth=0.35,recur=0.25,...")
     shards_cmd = commands.add_parser("shards", help="write the packs and manifest from cached neighbor graphs")
     shards_cmd.add_argument("features", type=Path)
     shards_cmd.add_argument("out", type=Path)
@@ -260,6 +272,8 @@ def main():
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     if args.command == "embed":
+        if args.weights:
+            PARAMS["combined_weights"] = args.weights
         run_embed(args.features, args.out, args.families.split(","), args.sample, args.epochs)
     elif args.command == "shards":
         data, numbers, graph = load_for(args.features, args.out)
