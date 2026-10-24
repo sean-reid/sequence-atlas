@@ -108,6 +108,31 @@ async function fetchOk(url: string): Promise<Response> {
   return res;
 }
 
+export type Progress = (received: number, total: number) => void;
+
+/** The whole body, reporting bytes against content-length when the server sends one. */
+async function readBody(res: Response, onProgress?: Progress): Promise<ArrayBuffer> {
+  const total = Number(res.headers.get("content-length"));
+  if (!onProgress || !res.body || !(total > 0)) return res.arrayBuffer();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.byteLength;
+    onProgress(Math.min(received, total), total);
+  }
+  const out = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer;
+}
+
 export class DataSource {
   private manifest: Promise<Manifest> | null = null;
   private families = new Map<Family, Promise<FamilyData>>();
@@ -128,10 +153,11 @@ export class DataSource {
     return `/data/v/${version}/${path}?b=${build}`;
   }
 
-  async getNumbers(): Promise<Uint32Array> {
+  /** The sorted A-numbers, one per point. Progress is reported for the first caller only. */
+  async getNumbers(onProgress?: Progress): Promise<Uint32Array> {
     this.numbers ??= this.url("numbers.u32")
       .then(fetchOk)
-      .then((r) => r.arrayBuffer())
+      .then((r) => readBody(r, onProgress))
       .then((b) => new Uint32Array(b));
     return this.numbers;
   }

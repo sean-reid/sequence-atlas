@@ -213,18 +213,26 @@ export class App {
     theme.applyPalette(this.color);
     const view = parseHash(location.hash);
     if (view.color) this.color = view.color;
-    const [manifest, numbers] = await Promise.all([
-      data.getManifest(),
-      data.getNumbers(),
-      this.showFamily(this.route.family, false),
-    ]);
+    if (view.x !== undefined) Object.assign(renderer.view, view);
+    // The first family draws as soon as it lands; the numbers, which only
+    // picking and selection need, keep loading behind it.
+    let count = 0;
+    const numbers = data.getNumbers((received, total) => {
+      if (!count) return;
+      const loaded = Math.round((received / total) * count);
+      status.textContent = `Loading ${thousands(loaded)} of ${thousands(count)} sequences`;
+    });
+    const family = this.showFamily(this.route.family, false);
+    const manifest = await data.getManifest();
+    count = manifest.count;
+    status.textContent = `Loading ${thousands(count)} sequences`;
     const snapshot = document.getElementById("snapshot");
     if (snapshot) snapshot.textContent = `, snapshot ${manifest.snapshot}`;
-    this.numbers = numbers;
+    await family;
     void data.getFeatures().catch(() => undefined);
-    status.hidden = true;
     if (this.color !== "cluster") await this.applyColor();
-    if (view.x !== undefined) Object.assign(renderer.view, view);
+    this.numbers = await numbers;
+    status.hidden = true;
     if (this.route.number !== null) {
       await this.select(this.route.number, false, view.x === undefined);
     }
@@ -232,6 +240,8 @@ export class App {
     document.body.dataset.ready = "1";
   }
 }
+
+const thousands = (n: number) => n.toLocaleString("en-US");
 
 // A module script can run before the stylesheet has arrived on a cold cache,
 // which would leave the palette empty and the canvas at its default size.

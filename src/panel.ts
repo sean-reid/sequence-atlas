@@ -95,11 +95,8 @@ export class Panel {
     const rows = await neighbours;
     if (token !== this.token) return;
     near.replaceChildren();
-    const names = await Promise.all(
-      rows.map((r) => this.deps.data.getBase(r[0]).catch(() => null)),
-    );
-    if (token !== this.token) return;
-    rows.forEach((row, i) => {
+    // Each row's name arrives with its own shard; the rows do not wait for each other.
+    for (const row of rows) {
       const li = document.createElement("li");
       const button = document.createElement("button");
       button.type = "button";
@@ -110,14 +107,19 @@ export class Panel {
       idSpan.textContent = formatANumber(row[0]);
       const nm = document.createElement("span");
       nm.className = "nm";
-      nm.textContent = names[i]?.name ?? "";
       const why = document.createElement("span");
       why.className = "why";
       why.textContent = [...new Set([phrases[row[1]], phrases[row[2]]].filter(Boolean))].join(", ");
       button.append(idSpan, nm, why);
       li.append(button);
       near.append(li);
-    });
+      void this.deps.data
+        .getBase(row[0])
+        .then((entry) => {
+          if (token === this.token && entry) nm.textContent = entry.name;
+        })
+        .catch(() => undefined);
+    }
   }
 }
 
