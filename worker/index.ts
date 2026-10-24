@@ -160,10 +160,11 @@ async function cached(
   make: () => Promise<Response>,
 ): Promise<Response> {
   const cache = caches.default;
-  const hit = await cache.match(request);
+  const key = request.method === "GET" ? request : new Request(request.url);
+  const hit = await cache.match(key);
   if (hit) return hit;
   const response = await make();
-  if (response.ok) ctx.waitUntil(cache.put(request, response.clone()));
+  if (response.ok) ctx.waitUntil(cache.put(key, response.clone()));
   return response;
 }
 
