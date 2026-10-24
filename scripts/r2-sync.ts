@@ -4,7 +4,8 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { env, r2Get, r2Put } from "./cloudflare.ts";
+import { gzipSync } from "node:zlib";
+import { env, GZIP_KINDS, r2Get, r2Put } from "./cloudflare.ts";
 
 const dir = process.argv[2] ?? "";
 const prefix = process.argv[3] ?? "";
@@ -54,7 +55,12 @@ async function worker(): Promise<void> {
   while (cursor < changed.length) {
     const rel = changed[cursor++]!;
     const type = rel.endsWith(".json") ? "application/json" : "application/octet-stream";
-    await r2Put(`${prefix}/${rel}`, readFileSync(join(dir, rel)), type);
+    const body = readFileSync(join(dir, rel));
+    if (GZIP_KINDS.test(rel)) {
+      await r2Put(`${prefix}/${rel}`, gzipSync(body), type, { "content-encoding": "gzip" });
+    } else {
+      await r2Put(`${prefix}/${rel}`, body, type);
+    }
     done++;
     if (done % 500 === 0) console.log(`${done}/${changed.length}`);
   }

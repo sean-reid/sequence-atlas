@@ -3,7 +3,8 @@
 // list taken from the live manifest.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { env, r2Get } from "./cloudflare.ts";
+import { gunzipSync } from "node:zlib";
+import { env, GZIP_KINDS, r2Get } from "./cloudflare.ts";
 
 const usage = "usage: node scripts/r2-pull.ts <key-prefix> <out-dir>";
 const prefix = process.argv[2] ?? "";
@@ -36,6 +37,11 @@ for (const name of files) {
     console.error(`${prefix}/${name} is missing`);
     process.exit(1);
   }
-  writeFileSync(join(dir, name), new Uint8Array(await res.arrayBuffer()));
+  let body = new Uint8Array(await res.arrayBuffer());
+  // fetch decodes a body whose response says gzip; one that arrives without
+  // the header and still starts with the gzip magic needs it here.
+  const encoded = body[0] === 0x1f && body[1] === 0x8b && !res.headers.has("content-encoding");
+  if (GZIP_KINDS.test(name) && encoded) body = new Uint8Array(gunzipSync(body));
+  writeFileSync(join(dir, name), body);
 }
 console.log(`${files.length} files from ${prefix} in ${dir}`);

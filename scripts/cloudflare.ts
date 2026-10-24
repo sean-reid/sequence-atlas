@@ -14,6 +14,10 @@ export interface Config {
   databases: { a: string; b: string };
 }
 
+// Objects of these kinds go into the bucket gzipped with content-encoding set;
+// layouts are random uint16 and stay raw.
+export const GZIP_KINDS = /\.(u8|u16|u32)$/;
+
 const USAGE_ENV = "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required";
 const MAX_ATTEMPTS = 12;
 let credentials: Credentials | null = null;

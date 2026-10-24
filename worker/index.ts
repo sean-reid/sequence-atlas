@@ -53,7 +53,12 @@ async function serveData(request: Request, env: Env, key: string): Promise<Respo
       : "public, max-age=300",
     etag: object.httpEtag,
   });
-  return new Response(object.body, { headers });
+  // Cluster, color, and number files are stored gzipped; the runtime must not
+  // compress them a second time.
+  if (object.httpMetadata?.contentEncoding !== "gzip")
+    return new Response(object.body, { headers });
+  headers.set("content-encoding", "gzip");
+  return new Response(object.body, { headers, encodeBody: "manual" });
 }
 
 // Shards of one kind live in a single pack object; the index maps a shard name
