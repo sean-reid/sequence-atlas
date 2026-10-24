@@ -1,3 +1,4 @@
+import { NOISE, QUANT_MAX } from "../shared/format.ts";
 import type { FamilyData } from "./data.ts";
 
 export interface View {
@@ -5,8 +6,6 @@ export interface View {
   x: number;
   y: number;
 }
-
-const NOISE = 65535;
 
 const VERTEX = `#version 300 es
 in vec2 p0;
@@ -245,8 +244,8 @@ export class MapRenderer {
     const data = this.current;
     if (!data) return [0, 0];
     const [x0, y0, x1, y1] = data.layout.bounds;
-    const qx = ((ex - x0) / (x1 - x0)) * 65535;
-    const qy = ((ey - y0) / (y1 - y0)) * 65535;
+    const qx = ((ex - x0) / (x1 - x0)) * QUANT_MAX;
+    const qy = ((ey - y0) / (y1 - y0)) * QUANT_MAX;
     return this.quantizedToScreen(qx, qy);
   }
 

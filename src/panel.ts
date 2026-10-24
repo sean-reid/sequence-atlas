@@ -1,4 +1,5 @@
 import { formatANumber } from "../shared/anumber.ts";
+import { NOISE } from "../shared/format.ts";
 import type { Family } from "../shared/url.ts";
 import type { BaseEntry, DataSource, FamilyData, NeighborRow } from "./data.ts";
 
@@ -69,7 +70,7 @@ export class Panel {
     if (token !== this.token) return;
     const clusterId = familyData.clusters[index];
     const cluster =
-      clusterId === undefined || clusterId === 65535 ? null : familyData.byId.get(clusterId);
+      clusterId === undefined || clusterId === NOISE ? null : familyData.byId.get(clusterId);
     if (!base) {
       el("p-name").textContent = failed
         ? "The details for this sequence did not load."

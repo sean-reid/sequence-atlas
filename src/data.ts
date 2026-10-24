@@ -1,4 +1,5 @@
 import { formatANumber } from "../shared/anumber.ts";
+import { shardName } from "../shared/format.ts";
 import { parseLayout, type Layout } from "../shared/layout.ts";
 import type { Family } from "../shared/url.ts";
 
@@ -40,8 +41,6 @@ export type NeighborRow = [number, number, number];
 export interface FeatureNames {
   [family: string]: { name: string; phrase: string }[];
 }
-
-const SHARD = 100;
 
 async function fetchOk(url: string): Promise<Response> {
   const res = await fetch(url);
@@ -125,7 +124,7 @@ export class DataSource {
   }
 
   private shard(kind: string, number: number): Promise<Record<string, unknown>> {
-    const key = `${kind}/${String(Math.floor(number / SHARD)).padStart(5, "0")}.json`;
+    const key = `${kind}/${shardName(number)}.json`;
     let pending = this.shards.get(key);
     if (!pending) {
       pending = this.url(`shards/${key}`)
