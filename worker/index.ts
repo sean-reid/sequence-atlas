@@ -131,6 +131,11 @@ async function serveShard(
   });
 }
 
+// The bucket serves two shapes of key and nothing else: the manifest, and a
+// path under a generation. Anything else is a 404 before storage is asked.
+const KEY = /^(manifest\.json|v\/[0-9a-z-]+\/[A-Za-z0-9._/-]+)$/;
+const allowedKey = (key: string): boolean => KEY.test(key) && !key.split("/").includes("..");
+
 // One host owns a whole IPv6 /64, so the budget is per /64 there and per address on IPv4.
 function rateKey(request: Request): string {
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
@@ -177,7 +182,7 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     } catch {
       return error(404, "not found");
     }
-    if (!key) return error(404, "not found");
+    if (!allowedKey(key)) return error(404, "not found");
     const shard = /^(v\/[^/]+)\/shards\/([a-z]+)\/(\d{5})\.json$/.exec(key);
     // Shard members are pre-compressed and the cache would hand them back
     // re-encoded, so only whole objects go through the edge cache.
