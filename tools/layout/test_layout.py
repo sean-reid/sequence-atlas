@@ -192,3 +192,36 @@ def test_place_new_with_all_noise_neighbors_stays_noise():
     clusters = np.array([fmt.NOISE, fmt.NOISE], dtype=np.uint16)
     _, lab = layout.place_new(M, np.arange(2), np.array([2]), positions, clusters)
     assert lab.tolist() == [fmt.NOISE]
+
+
+def tiny_out_dir(tmp_path, n=6):
+    """A six sequence out dir with one family's neighbor graph, enough for run_shards."""
+    cols = [("growth" if c.startswith("g_") else "recur", c) for c in COLOR_COLUMNS]
+    rng = np.random.default_rng(3)
+    X = rng.normal(size=(n, len(cols))).astype(np.float32)
+    numbers = np.arange(1, n + 1, dtype=np.uint32)
+    data = features.Data(
+        X, cols, numbers, [f"seq {i}" for i in range(n)], [["nonn"]] * n, ["1,2,3"] * n, [1] * n, np.zeros((0, 2))
+    )
+    numbers.tofile(tmp_path / "numbers.u32")
+    idx = np.array([[i] + [j for j in range(n) if j != i] for i in range(n)])
+    np.savez(tmp_path / "growth.knn.npz", idx=idx, dist=np.ones(idx.shape))
+    np.array([0, 0, 1, fmt.NOISE, 1, 0], dtype=np.uint16).tofile(tmp_path / "growth.cluster.u16")
+    return data, numbers
+
+
+def test_features_json_publishes_labels_and_format_beside_the_columns(tmp_path):
+    data, numbers = tiny_out_dir(tmp_path)
+    layout.run_shards(tmp_path, "2026-10-15", data, numbers, None)
+    doc = json.loads((tmp_path / "features.json").read_text())
+    assert set(doc) == {"growth", "labels", "format"}
+    assert doc["growth"] == [{"name": c, "phrase": features.phrase(c)} for c in COLOR_COLUMNS if c.startswith("g_")]
+    assert doc["labels"]["growth"] == codes.GROWTH_CLASSES and len(doc["labels"]["growth"]) == 8
+    assert len(doc["labels"]["order"]) == 8 and doc["labels"]["order"][-1] == "none up to order 12"
+    assert len(doc["labels"]["keyword"]) == 9 and doc["labels"]["keyword"][0] == "none of these"
+    assert doc["labels"]["keyword"][6] == "tabl or tabf"
+    assert doc["format"] == {"noise": 65535, "shardSize": 100, "quantMax": 65535, "neighbors": 20}
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["params"] == embed.PARAMS and manifest["count"] == 6
+    index = json.loads((tmp_path / "shards" / "base.index.json").read_text())
+    assert list(index) == ["00000"]

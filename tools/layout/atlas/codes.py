@@ -20,6 +20,16 @@ FAST_EXP_SLOPE = 1.5
 # Ratio trend of Catalan is 0.009 and of Bell is 0.030.
 FACTORIAL_RATIO_TREND = 0.02
 MAX_ORDER = 12
+ORDER_LABELS = [
+    "order 1",
+    "order 2",
+    "order 3",
+    "order 4",
+    "order 5 or 6",
+    "order 7 to 9",
+    "order 10 to 12",
+    "none up to order 12",
+]
 KEYWORD_GROUPS = [
     ("core", 1),
     ("nice", 2),
@@ -32,6 +42,7 @@ KEYWORD_GROUPS = [
     ("easy", 8),
 ]
 KEYWORD_LABELS = ["none of these", "core", "nice", "hard", "base", "mult", "tabl or tabf", "cons", "easy"]
+LABELS = {"growth": GROWTH_CLASSES, "order": ORDER_LABELS, "keyword": KEYWORD_LABELS}
 
 
 def growth_class(c):

@@ -23,10 +23,11 @@ from pathlib import Path
 import numpy as np
 
 from atlas import log
-from atlas.codes import GROWTH_CLASSES, KEYWORD_LABELS, color_codes, histogram
+from atlas.codes import GROWTH_CLASSES, KEYWORD_LABELS, LABELS, color_codes, histogram
 from atlas.embed import PARAMS, cluster, embed, explain, knn_graph, label_clusters
 from atlas.features import FAMILIES, family_matrix, feature_names, graph_features, load, needs_graph, standardize, take
 from atlas.format import (
+    FORMAT,
     NEIGHBORS,
     NOISE,
     read_layout,
@@ -119,7 +120,10 @@ def run_shards(out, snapshot, data, numbers, graph):
         path = out / f"{f}.cluster.u16"
         if path.exists():
             clusters[f] = np.fromfile(path, dtype=np.uint16)
-    (out / "features.json").write_text(json.dumps(feature_names(families, data.cols)))
+    features = feature_names(families, data.cols)
+    features["labels"] = LABELS
+    features["format"] = FORMAT
+    (out / "features.json").write_text(json.dumps(features))
     color = color_codes(data.X, data.cols, data.keywords)
     color.tofile(out / "color.u8")
     histogram("growth class", color[:, 0], GROWTH_CLASSES)
