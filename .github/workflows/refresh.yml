@@ -21,17 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: tools
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           working-directory: tools/layout
       # oeis.org refuses downloads from Actions runners; the oeisdata mirror on
@@ -57,7 +57,7 @@ jobs:
           echo "previous v/$previous, new v/$generation"
       - name: download the previous artifacts
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_REFRESH_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/r2-pull.ts "$PREVIOUS" data/prev
       - name: place new sequences and rebuild shards
         working-directory: tools/layout
@@ -66,15 +66,15 @@ jobs:
           uv run layout.py place ../../data/features ../../data/prev ../../data/next --snapshot "$SNAPSHOT"
       - name: upload changed objects
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_REFRESH_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/r2-sync.ts data/next "$GENERATION"
       - name: load the standby search database and flip
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_REFRESH_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           node scripts/search-sql.ts data/features/meta.tsv data/search.sql
           node scripts/d1-refresh.ts data/search.sql
       - name: publish the manifest
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_REFRESH_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
         run: node scripts/r2-manifest.ts data/next "$GENERATION"
