@@ -1,7 +1,8 @@
 import { formatANumber } from "../shared/anumber.ts";
 import { NOISE } from "../shared/format.ts";
 import type { Family } from "../shared/url.ts";
-import type { BaseEntry, DataSource, FamilyData, NeighborRow } from "./data.ts";
+import { DEFAULT_LABELS } from "./color.ts";
+import type { BaseEntry, DataSource, FamilyData, Features, NeighborRow } from "./data.ts";
 
 const FAMILY_NAMES: Record<Family, string> = {
   all: "combined",
@@ -11,16 +12,7 @@ const FAMILY_NAMES: Record<Family, string> = {
   graph: "references",
 };
 
-const GROWTH = [
-  "constant or periodic",
-  "linear growth",
-  "quadratic growth",
-  "cubic or quartic growth",
-  "higher polynomial growth",
-  "exponential growth",
-  "factorial growth or faster",
-  "irregular growth",
-];
+const NO_FEATURES: Features = { columns: {}, labels: DEFAULT_LABELS, format: null };
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -62,11 +54,14 @@ export class Panel {
     let failed = false;
     // The base entry and the neighbour rows key on the same number, so they load together.
     const neighbours = this.deps.data.getNeighbors(number, family).catch(() => [] as NeighborRow[]);
-    const base: BaseEntry | null = await this.deps.data.getBase(number).catch((error: unknown) => {
-      console.warn(error);
-      failed = true;
-      return null;
-    });
+    const [base, features]: [BaseEntry | null, Features] = await Promise.all([
+      this.deps.data.getBase(number).catch((error: unknown) => {
+        console.warn(error);
+        failed = true;
+        return null;
+      }),
+      this.deps.data.getFeatures().catch(() => NO_FEATURES),
+    ]);
     if (token !== this.token) return;
     const clusterId = familyData.clusters[index];
     const cluster =
@@ -83,7 +78,7 @@ export class Panel {
     el("p-terms").textContent = base.terms.split(",").join(", ") + ", …";
     el("p-keywords").textContent = base.keywords.join(" ");
     const [growth, order] = base.color;
-    const bits = [GROWTH[growth] ?? ""];
+    const bits = [`${features.labels.growth[growth] ?? "irregular"} growth`];
     if (order > 0) bits.push(`linear recurrence of order ${order}`);
     const summary = document.createElement("span");
     summary.append(bits.filter(Boolean).join(", ") + ". ");
@@ -96,13 +91,8 @@ export class Panel {
     }
     el("p-summary").replaceChildren(summary);
 
-    const [rows, phrases]: [NeighborRow[], string[]] = await Promise.all([
-      neighbours,
-      this.deps.data
-        .getFeatureNames()
-        .then((f) => (f[family] ?? []).map((c) => c.phrase))
-        .catch(() => []),
-    ]);
+    const phrases = (features.columns[family] ?? []).map((c) => c.phrase);
+    const rows = await neighbours;
     if (token !== this.token) return;
     near.replaceChildren();
     const names = await Promise.all(

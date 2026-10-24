@@ -1,7 +1,8 @@
 import { formatANumber } from "../shared/anumber.ts";
-import { shardName } from "../shared/format.ts";
+import { NOISE, QUANT_MAX, SHARD_SIZE, shardName } from "../shared/format.ts";
 import { parseLayout, type Layout } from "../shared/layout.ts";
-import type { Family } from "../shared/url.ts";
+import { FAMILIES, type Family } from "../shared/url.ts";
+import { DEFAULT_LABELS, type LabelTables } from "./color.ts";
 
 export interface Manifest {
   version: string;
@@ -38,8 +39,67 @@ export interface BaseEntry {
 
 export type NeighborRow = [number, number, number];
 
-export interface FeatureNames {
-  [family: string]: { name: string; phrase: string }[];
+export interface FeatureColumn {
+  name: string;
+  phrase: string;
+}
+
+/** The writer's copy of shared/format.ts, checked on load. */
+export interface FormatBlock {
+  noise: number;
+  shardSize: number;
+  quantMax: number;
+  neighbors: number;
+}
+
+export interface Features {
+  columns: Partial<Record<Family, FeatureColumn[]>>;
+  labels: LabelTables;
+  format: FormatBlock | null;
+}
+
+const LABEL_LENGTHS: Record<keyof LabelTables, number> = { growth: 8, order: 8, keyword: 9 };
+
+function labelTables(raw: unknown): LabelTables {
+  if (!raw || typeof raw !== "object") return DEFAULT_LABELS;
+  const tables = raw as Record<string, unknown>;
+  const out = { ...DEFAULT_LABELS };
+  for (const key of Object.keys(LABEL_LENGTHS) as (keyof LabelTables)[]) {
+    const list = tables[key];
+    if (
+      Array.isArray(list) &&
+      list.length === LABEL_LENGTHS[key] &&
+      list.every((s) => typeof s === "string")
+    ) {
+      out[key] = list as string[];
+    }
+  }
+  return out;
+}
+
+/**
+ * Reads features.json: a column list per family, plus the label tables and
+ * the format block newer snapshots carry. A format block that disagrees with
+ * this client's constants throws, since every byte would then be misread.
+ */
+export function parseFeatures(raw: unknown): Features {
+  if (!raw || typeof raw !== "object") throw new Error("features.json is not an object");
+  const doc = raw as Record<string, unknown>;
+  const columns: Features["columns"] = {};
+  for (const family of FAMILIES) {
+    const list = doc[family];
+    if (Array.isArray(list)) columns[family] = list as FeatureColumn[];
+  }
+  const format = (doc.format as FormatBlock | undefined) ?? null;
+  if (format) {
+    const expected = { noise: NOISE, shardSize: SHARD_SIZE, quantMax: QUANT_MAX };
+    for (const [key, value] of Object.entries(expected)) {
+      const got = format[key as keyof typeof expected];
+      if (got !== value)
+        throw new Error(`features.json ${key} is ${got}, this client reads ${value}`);
+    }
+  }
+  return { columns, labels: labelTables(doc.labels), format };
 }
 
 async function fetchOk(url: string): Promise<Response> {
@@ -52,7 +112,7 @@ export class DataSource {
   private manifest: Promise<Manifest> | null = null;
   private families = new Map<Family, Promise<FamilyData>>();
   private numbers: Promise<Uint32Array> | null = null;
-  private features: Promise<FeatureNames> | null = null;
+  private features: Promise<Features> | null = null;
   private shards = new Map<string, Promise<Record<string, unknown>>>();
   private colors: Promise<Uint8Array> | null = null;
 
@@ -116,10 +176,11 @@ export class DataSource {
     return pending;
   }
 
-  async getFeatureNames(): Promise<FeatureNames> {
+  async getFeatures(): Promise<Features> {
     this.features ??= this.url("features.json")
       .then(fetchOk)
-      .then((r) => r.json() as Promise<FeatureNames>);
+      .then((r) => r.json())
+      .then(parseFeatures);
     return this.features;
   }
 

@@ -468,7 +468,7 @@ async function start(): Promise<void> {
   const snapshot = document.getElementById("snapshot");
   if (snapshot) snapshot.textContent = `, snapshot ${manifest.snapshot}`;
   numbers = loadedNumbers;
-  void data.getFeatureNames().catch(() => undefined);
+  void data.getFeatures().catch(() => undefined);
   status.hidden = true;
   if (color !== "cluster") await applyColor();
   if (view.x !== undefined) Object.assign(renderer.view, view);
