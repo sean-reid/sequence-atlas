@@ -5,6 +5,8 @@ import struct
 import numpy as np
 
 import layout
+from atlas import codes, embed, features
+from atlas import format as fmt
 
 COLOR_COLUMNS = [
     "g_poly_slope",
@@ -66,7 +68,7 @@ def rows(*values):
 
 def test_layout_header_and_quantized_point(tmp_path):
     Y = np.array([[-1.0, 2.0], [3.0, 6.0], [1.0, 3.0]], dtype=np.float32)
-    q = layout.write_layout(tmp_path / "f.layout.bin", Y)
+    q = fmt.write_layout(tmp_path / "f.layout.bin", Y)
     raw = (tmp_path / "f.layout.bin").read_bytes()
     assert raw[:4] == b"ATL1"
     count, x0, y0, x1, y1 = struct.unpack_from("<I4f", raw, 4)
@@ -83,33 +85,33 @@ def test_explain_picks_shared_extreme_columns():
     nn = np.array([[1, 2], [0, 2], [0, 1]])
     # Row 0 against row 1: column 0 shares 3 with no gap, column 1 is 0, column 2 scores 1 - 4.
     # Row 0 against row 2: column 2 is 0, column 1 scores 1 - 4, column 0 scores 1.5 - 6.
-    assert layout.explain(Z, nn)[0].tolist() == [[0, 1], [2, 1]]
+    assert embed.explain(Z, nn)[0].tolist() == [[0, 1], [2, 1]]
 
 
 def test_color_codes_for_known_sequences():
     cols = [("test", name) for name in COLOR_COLUMNS]
     X = rows(ONES, SQUARES, POWERS_OF_TWO, FACTORIALS)
     keywords = [["nonn", "core", "easy", "mult"], ["nonn", "tabl", "easy"], ["hard", "nonn"], ["nonn"]]
-    codes = layout.color_codes(X, cols, keywords)
-    assert codes.dtype == np.uint8 and codes.shape == (4, 3)
-    assert codes[:, 0].tolist() == [0, 2, 5, 6]
-    assert codes[:, 1].tolist() == [1, 3, 1, 0]
-    assert codes[:, 2].tolist() == [1, 6, 3, 0]
+    c = codes.color_codes(X, cols, keywords)
+    assert c.dtype == np.uint8 and c.shape == (4, 3)
+    assert c[:, 0].tolist() == [0, 2, 5, 6]
+    assert c[:, 1].tolist() == [1, 3, 1, 0]
+    assert c[:, 2].tolist() == [1, 6, 3, 0]
 
 
 def test_recurrence_order_is_capped():
     cols = [("test", name) for name in COLOR_COLUMNS]
-    codes = layout.color_codes(rows({"r_order": 40, "r_found": 1}), cols, [[]])
-    assert codes[0, 1] == 12
+    c = codes.color_codes(rows({"r_order": 40, "r_found": 1}), cols, [[]])
+    assert c[0, 1] == 12
 
 
 def test_shard_naming_and_grouping(tmp_path):
     numbers = np.array([1, 99, 100, 199, 250], dtype=np.uint32)
-    assert layout.shard_key(45) == "A000045"
-    assert layout.shard_file(250) == "00002.json"
-    groups = layout.shard_groups(numbers)
+    assert fmt.shard_key(45) == "A000045"
+    assert fmt.shard_file(250) == "00002.json"
+    groups = fmt.shard_groups(numbers)
     assert list(groups) == ["00000.json", "00001.json", "00002.json"]
-    layout.write_shard_pack(tmp_path / "base.pack", numbers, groups, lambda i: int(numbers[i]) * 2)
+    fmt.write_shard_pack(tmp_path / "base.pack", numbers, groups, lambda i: int(numbers[i]) * 2)
     index = json.loads((tmp_path / "base.index.json").read_text())
     assert list(index) == ["00000", "00001", "00002"]
     pack = (tmp_path / "base.pack").read_bytes()
@@ -127,16 +129,16 @@ def test_label_prefers_bigram_over_its_tokens():
         + ["number of primes"] * 5
     )
     labels = np.array([0] * 8 + [-1] * 17)
-    assert layout.label_clusters(labels, names, [[]] * len(names)) == {0: ["twin primes", "below"]}
+    assert embed.label_clusters(labels, names, [[]] * len(names)) == {0: ["twin primes", "below"]}
 
 
 def test_label_ties_are_deterministic():
     scored = [(1.0, "zeta"), (1.0, "alpha"), (1.0, "beta gamma"), (1.0, "alpha beta")]
-    assert layout.pick_label(scored) == ["alpha beta", "zeta"]
+    assert embed.pick_label(scored) == ["alpha beta", "zeta"]
 
 
 def test_label_tokens_skip_stop_words_and_keep_keywords():
-    assert layout.tokens_for("Least prime whose twin primes are given", ["nonn", "hard"]) == {
+    assert embed.tokens_for("Least prime whose twin primes are given", ["nonn", "hard"]) == {
         "prime",
         "twin",
         "primes",
@@ -147,25 +149,26 @@ def test_label_tokens_skip_stop_words_and_keep_keywords():
 
 def test_feature_names_follow_the_family_matrix_columns():
     cols = [("growth", "g_poly_slope"), ("arith", "a_entropy_mod2"), ("recur", "r_order")]
-    names = layout.feature_names(["recur", "graph"], cols)
+    names = features.feature_names(["recur", "graph"], cols)
     assert names["recur"] == [{"name": "r_order", "phrase": "recurrence order"}]
     assert names["graph"][0] == {"name": "spec0", "phrase": "cross-reference community"}
     assert names["graph"][-1] == {"name": "degree", "phrase": "number of cross references"}
-    assert len(names["graph"]) == layout.SPECTRAL_DIMS + len(layout.KEYWORDS) + 1
+    assert len(names["graph"]) == features.SPECTRAL_DIMS + len(features.KEYWORDS) + 1
     assert all(" " not in n["name"] and "_" not in n["phrase"] for f in names.values() for n in f)
 
 
 def test_manifest(tmp_path):
-    written = layout.write_manifest(tmp_path / "manifest.json", 3, ["growth", "all"], "2026-10-15")
+    written = fmt.write_manifest(tmp_path / "manifest.json", 3, ["growth", "all"], "2026-10-15", {"k": 1})
     assert json.loads((tmp_path / "manifest.json").read_text()) == written
     assert written["count"] == 3 and written["families"] == ["growth", "all"] and written["snapshot"] == "2026-10-15"
     assert len(written["version"]) == 8 and written["version"].isdigit()
+    assert written["params"] == {"k": 1}
 
 
 def test_place_new_lands_between_its_neighbors_and_inherits_their_cluster():
     M = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [10.0, 10.0], [0.3, 0.3]], dtype=np.float32)
     positions = np.array([[0.0, 0.0], [2.0, 0.0], [0.0, 2.0], [50.0, 50.0]], dtype=np.float32)
-    clusters = np.array([7, 7, layout.NOISE, 3], dtype=np.uint16)
+    clusters = np.array([7, 7, fmt.NOISE, 3], dtype=np.uint16)
     old = np.arange(4)
     new = np.array([4])
     pos, lab = layout.place_new(M, old, new, positions, clusters)
@@ -176,8 +179,8 @@ def test_place_new_lands_between_its_neighbors_and_inherits_their_cluster():
 
 def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
     Y = np.array([[-1.0, 2.0], [3.0, 6.0], [9.0, -9.0]], dtype=np.float32)
-    layout.write_layout(tmp_path / "f.layout.bin", Y, bounds=[-1.0, 2.0, 3.0, 6.0])
-    back, bounds = layout.read_layout(tmp_path / "f.layout.bin")
+    fmt.write_layout(tmp_path / "f.layout.bin", Y, bounds=[-1.0, 2.0, 3.0, 6.0])
+    back, bounds = fmt.read_layout(tmp_path / "f.layout.bin")
     assert bounds.tolist() == [-1.0, 2.0, 3.0, 6.0]
     assert np.allclose(back[:2], Y[:2], atol=1e-3)
     assert back[2].tolist() == [3.0, 2.0]
@@ -186,6 +189,6 @@ def test_read_layout_round_trips_write_layout_with_fixed_bounds(tmp_path):
 def test_place_new_with_all_noise_neighbors_stays_noise():
     M = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.5]], dtype=np.float32)
     positions = np.array([[0.0, 0.0], [2.0, 0.0]], dtype=np.float32)
-    clusters = np.array([layout.NOISE, layout.NOISE], dtype=np.uint16)
+    clusters = np.array([fmt.NOISE, fmt.NOISE], dtype=np.uint16)
     _, lab = layout.place_new(M, np.arange(2), np.array([2]), positions, clusters)
-    assert lab.tolist() == [layout.NOISE]
+    assert lab.tolist() == [fmt.NOISE]
