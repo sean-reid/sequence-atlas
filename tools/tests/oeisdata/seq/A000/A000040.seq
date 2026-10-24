@@ -1,0 +1,17 @@
+%I A000040 M0652 N0241 #1401 Oct 03 2026 09:50:40
+%S A000040 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,
+%T A000040 97,101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,
+%U A000040 181,191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271
+%N A000040 The prime numbers.
+%Y A000040 For is_prime and next_prime, see A010051 and A151800.
+%Y A000040 Cf. A000720 ("pi"), A001223 (differences between primes), A002476, A002808, A003627, A006879, A006880, A008578, A080339, A233588.
+%Y A000040 Cf. primes in lexicographic order: A210757, A210758, A210759, A210760, A210761.
+%Y A000040 Cf. A003558, A179480 (relating to the Quasi-order theorem of Hilton and Pedersen).
+%Y A000040 Boustrophedon transforms: A000747, A000732, A230953.
+%Y A000040 a(2n) = A104272(n) - A233739(n).
+%Y A000040 Related sequences:
+%Y A000040 Primes (p) and composites (c): A002808, A000720, A065855.
+%Y A000040 Primes between p(n) and 2*p(n): A063124, A070046; between c(n) and 2*c(n): A376761; between n and 2*n: A035250, A060715, A077463, A108954.
+%Y A000040 Composites between p(n) and 2*p(n): A246514; between c(n) and 2*c(n): A376760; between n and 2*n: A075084, A307912, A307989, A376759.
+%K A000040 core,nonn,nice,easy,changed
+%O A000040 1,1

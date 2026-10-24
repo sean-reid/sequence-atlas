@@ -74,10 +74,15 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --release -- -D warnings
       - run: cargo test --release
+      - run: cargo build --release
       - uses: astral-sh/setup-uv@v7
         with:
           working-directory: tools/layout
       - run: uv sync --locked
         working-directory: tools/layout
       - run: uv run pytest
+        working-directory: tools/layout
+      - run: uv run ruff check .
+        working-directory: tools/layout
+      - run: uv run ruff format --check .
         working-directory: tools/layout

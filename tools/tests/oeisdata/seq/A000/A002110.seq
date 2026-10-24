@@ -1,0 +1,13 @@
+%I A002110 M1691 N0668 #405 Oct 04 2026 18:44:17
+%S A002110 1,2,6,30,210,2310,30030,510510,9699690,223092870,6469693230,
+%T A002110 200560490130,7420738134810,304250263527210,13082761331670030,
+%U A002110 614889782588491410,32589158477190044730,1922760350154212639070,117288381359406970983270,7858321551080267055879090
+%N A002110 Primorial numbers (first definition): product of first n primes. Sometimes written prime(n)#.
+%Y A002110 A034386 gives the second version of the primorial numbers.
+%Y A002110 Subsequence of A005117 and of A064807. Apart from the first term, a subsequence of A083207.
+%Y A002110 Cf. A001615, A002182, A002201, A003418, A005235, A006862, A034444 (unitary divisors), A034448, A034387, A033188, A035345, A035346, A036691 (compositorial numbers), A049345 (primorial base representation), A057588, A060735 (and integer multiples), A061742 (squares), A072938, A079266, A087315, A094348, A106037, A121572, A053589, A064648, A132120, A260188.
+%Y A002110 Cf. A061720 (first differences), A143293 (partial sums).
+%Y A002110 Cf. also A276085, A276086.
+%Y A002110 The following fractions are all related to each other: Sum 1/n: A001008/A002805, Sum 1/prime(n): A024451/A002110 and A106830/A034386, Sum 1/nonprime(n): A282511/A282512, Sum 1/composite(n): A250133/A296358.
+%K A002110 nonn,easy,nice,core,changed
+%O A002110 0,2
