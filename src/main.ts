@@ -224,8 +224,8 @@ function hover(e: PointerEvent): void {
   const current = renderer.family;
   const index = indexes.get(route.family);
   if (!current || !index) return;
-  const [qx, qy] = renderer.screenToQuantized(e.clientX, e.clientY);
-  const hit = index.nearest(qx, qy, renderer.unitsPerPixel() * 12);
+  const [qx, qy] = renderer.projection.screenToQuantized(e.clientX, e.clientY);
+  const hit = index.nearest(qx, qy, renderer.projection.unitsPerPixel() * 12);
   if (hit < 0) {
     hoverBox.hidden = true;
     canvas.style.cursor = "crosshair";
@@ -380,8 +380,8 @@ function endPointer(e: PointerEvent): void {
   if (drag && !drag.moved) {
     const index = indexes.get(route.family);
     if (index) {
-      const [qx, qy] = renderer.screenToQuantized(e.clientX, e.clientY);
-      const radius = renderer.unitsPerPixel() * (e.pointerType === "touch" ? 22 : 12);
+      const [qx, qy] = renderer.projection.screenToQuantized(e.clientX, e.clientY);
+      const radius = renderer.projection.unitsPerPixel() * (e.pointerType === "touch" ? 22 : 12);
       const hit = index.nearest(qx, qy, radius);
       void select(hit >= 0 ? numbers[hit]! : null, true);
     }
