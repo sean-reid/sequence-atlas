@@ -10,6 +10,7 @@ Node 24, Rust stable, and uv.
 npm install
 npm run build          # bundle the client into dist/
 npm run fixture        # 600 synthetic sequences into dist/data and the local search database
+npm run dev:data       # or seed wrangler's local R2 state from ~/.cache/sequence-atlas/spike-fast (or a directory you name)
 npm run dev            # wrangler dev on http://localhost:8787
 npm test               # unit tests
 npm run test:e2e       # Playwright over the fixture; run npx playwright install chromium once

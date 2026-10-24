@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "wrangler dev",
+    "dev:data": "node scripts/dev-data.ts",
     "fixture": "node scripts/fixture-data.ts dist/data && node scripts/search-sql.ts dist/data/meta.tsv dist/fixture.sql && wrangler d1 migrations apply sequence-atlas --local && wrangler d1 execute sequence-atlas --local --file dist/fixture.sql",
     "dev:web": "vite",
     "build": "vite build",
