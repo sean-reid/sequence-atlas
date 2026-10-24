@@ -81,3 +81,7 @@ jobs:
         working-directory: tools/layout
       - run: uv run pytest
         working-directory: tools/layout
+      - run: uv run ruff check .
+        working-directory: tools/layout
+      - run: uv run ruff format --check .
+        working-directory: tools/layout

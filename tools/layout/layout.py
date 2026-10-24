@@ -17,6 +17,7 @@ neighbors in feature space, then shards runs over everything.
 
 import csv
 import gzip
+import itertools
 import json
 import re
 import struct
@@ -32,22 +33,45 @@ from scipy.sparse.linalg import LinearOperator, eigsh
 
 FAMILIES = ["growth", "arith", "recur", "graph", "all"]
 KEYWORDS = [
-    "base", "bref", "cofr", "cons", "core", "dumb", "easy", "eigen", "fini", "frac",
-    "full", "hard", "hear", "less", "look", "more", "mult", "nice", "nonn", "obsc",
-    "sign", "tabf", "tabl", "walk", "word",
+    "base",
+    "bref",
+    "cofr",
+    "cons",
+    "core",
+    "dumb",
+    "easy",
+    "eigen",
+    "fini",
+    "frac",
+    "full",
+    "hard",
+    "hear",
+    "less",
+    "look",
+    "more",
+    "mult",
+    "nice",
+    "nonn",
+    "obsc",
+    "sign",
+    "tabf",
+    "tabl",
+    "walk",
+    "word",
 ]
 SPECTRAL_DIMS = 32
 NEIGHBORS = 20
 UMAP_K = 15
 KNN_K = NEIGHBORS + 1
-STOP = set("""
+STOP_WORDS = """
 a an the of for and or with in to on by at is are as that which whose where from into
 than not no if all one two such its this be when then also each any other over under
 number numbers sequence sequences term terms integer integers n k m x y z read rows row
 expansion coefficients coefficient function triangle array table partial sums sum
 satisfies exists form smallest least only more look taken consisting having gives given
 equal equals exactly first using whose into such
-""".split())
+"""
+STOP = frozenset(STOP_WORDS.split())
 LABEL_WORDS = 3
 TOKEN = re.compile(r"[a-z][a-z'-]{2,}")
 
@@ -68,14 +92,12 @@ class Data(NamedTuple):
 
 
 def load(features_dir):
-    cols = [tuple(line.rstrip("\n").split("\t")) for line in open(features_dir / "columns.tsv")]
+    cols = [tuple(line.split("\t")) for line in (features_dir / "columns.tsv").read_text().splitlines()]
     X = np.fromfile(features_dir / "features.f32", dtype=np.float32).reshape(-1, len(cols))
-    meta = []
     with open(features_dir / "meta.tsv", newline="") as f:
         reader = csv.reader(f, delimiter="\t", quoting=csv.QUOTE_NONE)
         next(reader)
-        for row in reader:
-            meta.append(row)
+        meta = list(reader)
     numbers = np.array([int(r[0]) for r in meta], dtype=np.uint32)
     names = [r[4] for r in meta]
     keywords = [r[3].split(",") if r[3] else [] for r in meta]
@@ -295,7 +317,14 @@ def cluster(Y):
     pick = np.sort(rng.choice(n, min(n, CLUSTER_SAMPLE), replace=False))
     size = max(50, len(pick) // 1500)
     cap = len(pick) // 20
-    sub = HDBSCAN(min_cluster_size=size, min_samples=10, max_cluster_size=cap, cluster_selection_method="eom", n_jobs=-1, copy=True).fit_predict(Y[pick])
+    sub = HDBSCAN(
+        min_cluster_size=size,
+        min_samples=10,
+        max_cluster_size=cap,
+        cluster_selection_method="eom",
+        n_jobs=-1,
+        copy=True,
+    ).fit_predict(Y[pick])
     labels = np.full(n, -1, dtype=np.int64)
     labels[pick] = sub
     rest = np.setdiff1d(np.arange(n), pick)
@@ -304,14 +333,16 @@ def cluster(Y):
     k = labels.max() + 1
     noise = np.mean(labels < 0)
     largest = np.bincount(labels[labels >= 0]).max() if k else 0
-    log(f"hdbscan: {k} clusters, {noise:.1%} noise, largest {largest}, min size {size}, cap {cap}, sample {len(pick)}, in {time.time() - t:.0f}s")
+    log(
+        f"hdbscan: {k} clusters, {noise:.1%} noise, largest {largest}, min size {size}, cap {cap}, sample {len(pick)}, in {time.time() - t:.0f}s"
+    )
     return labels
 
 
 def tokens_for(name, kws):
     words = TOKEN.findall(name.lower())
     toks = {t for t in words if t not in STOP}
-    toks |= {f"{a} {b}" for a, b in zip(words, words[1:]) if a not in STOP and b not in STOP}
+    toks |= {f"{a} {b}" for a, b in itertools.pairwise(words) if a not in STOP and b not in STOP}
     toks |= {f"kw:{k}" for k in kws if k not in ("nonn", "changed", "new", "easy", "sign")}
     return toks
 
@@ -377,14 +408,33 @@ def explain(Z, nn, limit=2):
     return out
 
 
-GROWTH_CLASSES = ["periodic", "linear", "quadratic", "cubic or quartic", "higher polynomial", "exponential", "factorial", "other"]
+GROWTH_CLASSES = [
+    "periodic",
+    "linear",
+    "quadratic",
+    "cubic or quartic",
+    "higher polynomial",
+    "exponential",
+    "factorial",
+    "other",
+]
 # log10 slope per index of n^2 over 80 terms is 0.048; n^3 is 0.083.
 SLOW_EXP_SLOPE = 0.05
 FAST_EXP_SLOPE = 1.5
 # Ratio trend of Catalan is 0.009 and of Bell is 0.030.
 FACTORIAL_RATIO_TREND = 0.02
 MAX_ORDER = 12
-KEYWORD_GROUPS = [("core", 1), ("nice", 2), ("hard", 3), ("base", 4), ("mult", 5), ("tabl", 6), ("tabf", 6), ("cons", 7), ("easy", 8)]
+KEYWORD_GROUPS = [
+    ("core", 1),
+    ("nice", 2),
+    ("hard", 3),
+    ("base", 4),
+    ("mult", 5),
+    ("tabl", 6),
+    ("tabf", 6),
+    ("cons", 7),
+    ("easy", 8),
+]
 
 
 def growth_class(c):
@@ -495,7 +545,7 @@ def run_embed(features_dir, out, families, sample, epochs):
     numbers.tofile(out / "numbers.u32")
     graph = graph_features(numbers, keywords, data.xrefs) if needs_graph(families) else None
 
-    report = {"count": int(len(numbers)), "families": {}}
+    report = {"count": len(numbers), "families": {}}
     probes = [45, 40, 290, 108, 5132, 2, 796, 10, 142, 1006]
     index = {int(n): i for i, n in enumerate(numbers)}
     for family in families:
@@ -510,9 +560,17 @@ def run_embed(features_dir, out, families, sample, epochs):
         clusters = []
         for c, toks in label_text.items():
             m = labels == c
-            clusters.append({"id": int(c), "label": " ".join(toks), "size": int(m.sum()), "cx": float(Y[m, 0].mean()), "cy": float(Y[m, 1].mean())})
+            clusters.append(
+                {
+                    "id": int(c),
+                    "label": " ".join(toks),
+                    "size": int(m.sum()),
+                    "cx": float(Y[m, 0].mean()),
+                    "cy": float(Y[m, 1].mean()),
+                }
+            )
         clusters.sort(key=lambda c: -c["size"])
-        json.dump(clusters, open(out / f"{family}.clusters.json", "w"))
+        (out / f"{family}.clusters.json").write_text(json.dumps(clusters))
         nn = knn[0][:, 1:]
         sample_nn = {}
         for p in probes:
@@ -526,13 +584,26 @@ def run_embed(features_dir, out, families, sample, epochs):
             "neighbors": sample_nn,
         }
     report["seconds"] = round(time.time() - t0)
-    json.dump(report, open(out / f"report-{'-'.join(families)}.json", "w"), indent=1)
+    (out / f"report-{'-'.join(families)}.json").write_text(json.dumps(report, indent=1))
     log(f"done in {report['seconds']}s")
 
 
+def neighbor_entry(numbers, nn, why):
+    def near(i):
+        return [[int(numbers[j]), int(a), int(b)] for j, (a, b) in zip(nn[i], why[i], strict=True)]
+
+    return near
+
+
 def write_manifest(path, count, families, snapshot):
-    manifest = {"version": time.strftime("%Y%m%d"), "build": "local", "count": int(count), "families": list(families), "snapshot": snapshot}
-    json.dump(manifest, open(path, "w"))
+    manifest = {
+        "version": time.strftime("%Y%m%d"),
+        "build": "local",
+        "count": int(count),
+        "families": list(families),
+        "snapshot": snapshot,
+    }
+    path.write_text(json.dumps(manifest))
     return manifest
 
 
@@ -550,7 +621,7 @@ def run_shards(features_dir, out, snapshot):
         path = out / f"{f}.cluster.u16"
         if path.exists():
             clusters[f] = np.fromfile(path, dtype=np.uint16)
-    json.dump(feature_names(families, data.cols), open(out / "features.json", "w"))
+    (out / "features.json").write_text(json.dumps(feature_names(families, data.cols)))
     color = color_codes(data.X, data.cols, data.keywords)
     color.tofile(out / "color.u8")
     histogram("growth class", color[:, 0], GROWTH_CLASSES)
@@ -577,10 +648,7 @@ def run_shards(features_dir, out, snapshot):
         # and degree are not, so score on a standardized copy.
         why = explain(standardize(M), nn)
 
-        def near(i):
-            return [[int(numbers[j]), int(a), int(b)] for j, (a, b) in zip(nn[i], why[i])]
-
-        raw, packed = write_shard_pack(out / "shards" / f"{f}.pack", numbers, groups, near)
+        raw, packed = write_shard_pack(out / "shards" / f"{f}.pack", numbers, groups, neighbor_entry(numbers, nn, why))
         log(f"shards/{f}.pack: {len(groups)} shards, {raw:.1f} KB raw, {packed:.1f} KB gzipped each")
     log(f"manifest: {write_manifest(out / 'manifest.json', len(numbers), families, snapshot)}")
     log(f"done in {time.time() - t0:.0f}s")
@@ -652,11 +720,11 @@ def run_place(features_dir, prev, out, snapshot):
             clusters[new_rows] = lab
         write_layout(out / f"{f}.layout.bin", positions, bounds)
         clusters.tofile(out / f"{f}.cluster.u16")
-        info = json.load(open(prev / f"{f}.clusters.json"))
+        info = json.loads((prev / f"{f}.clusters.json").read_text())
         sizes = np.bincount(clusters[clusters != NOISE], minlength=len(info))
         for c in info:
             c["size"] = int(sizes[c["id"]]) if c["id"] < len(sizes) else 0
-        json.dump(info, open(out / f"{f}.clusters.json", "w"))
+        (out / f"{f}.clusters.json").write_text(json.dumps(info))
         cache = out / f"{f}.knn.npz"
         if cache.exists():
             cache.unlink()

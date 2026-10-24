@@ -7,15 +7,53 @@ import numpy as np
 import layout
 
 COLOR_COLUMNS = [
-    "g_poly_slope", "g_poly_resid", "g_exp_slope", "g_exp_resid", "g_fact_resid", "g_ratio_trend",
-    "r_order", "r_found", "r_diff_degree", "r_poly", "r_period", "r_eventually_constant",
+    "g_poly_slope",
+    "g_poly_resid",
+    "g_exp_slope",
+    "g_exp_resid",
+    "g_fact_resid",
+    "g_ratio_trend",
+    "r_order",
+    "r_found",
+    "r_diff_degree",
+    "r_poly",
+    "r_period",
+    "r_eventually_constant",
 ]
 
 # Feature values the Rust tool computes for A000012, A000290, A000079, A000142.
 ONES = {"r_order": 1, "r_found": 1, "r_diff_degree": 1, "r_poly": 1, "r_period": 1, "r_eventually_constant": 1}
-SQUARES = {"g_poly_slope": 2.0, "g_exp_slope": 0.048, "g_exp_resid": 0.319, "g_fact_resid": 0.385, "g_ratio_trend": -0.004, "r_order": 3, "r_found": 1, "r_diff_degree": 3, "r_poly": 1}
-POWERS_OF_TWO = {"g_poly_slope": 6.784, "g_poly_resid": 1.242, "g_exp_slope": 0.302, "g_exp_resid": 0.048, "g_fact_resid": 0.391, "r_order": 1, "r_found": 1, "r_diff_degree": 11}
-FACTORIALS = {"g_poly_slope": 14.859, "g_poly_resid": 3.3, "g_exp_slope": 1.014, "g_exp_resid": 0.844, "g_fact_resid": 0.092, "g_ratio_trend": 0.051, "r_order": 13, "r_diff_degree": 11}
+SQUARES = {
+    "g_poly_slope": 2.0,
+    "g_exp_slope": 0.048,
+    "g_exp_resid": 0.319,
+    "g_fact_resid": 0.385,
+    "g_ratio_trend": -0.004,
+    "r_order": 3,
+    "r_found": 1,
+    "r_diff_degree": 3,
+    "r_poly": 1,
+}
+POWERS_OF_TWO = {
+    "g_poly_slope": 6.784,
+    "g_poly_resid": 1.242,
+    "g_exp_slope": 0.302,
+    "g_exp_resid": 0.048,
+    "g_fact_resid": 0.391,
+    "r_order": 1,
+    "r_found": 1,
+    "r_diff_degree": 11,
+}
+FACTORIALS = {
+    "g_poly_slope": 14.859,
+    "g_poly_resid": 3.3,
+    "g_exp_slope": 1.014,
+    "g_exp_resid": 0.844,
+    "g_fact_resid": 0.092,
+    "g_ratio_trend": 0.051,
+    "r_order": 13,
+    "r_diff_degree": 11,
+}
 
 
 def rows(*values):
@@ -81,7 +119,13 @@ def test_shard_naming_and_grouping(tmp_path):
 
 
 def test_label_prefers_bigram_over_its_tokens():
-    names = ["twin primes below n"] * 5 + ["twin primes above n"] * 3 + ["primes dividing n"] * 6 + ["twin towers"] * 6 + ["number of primes"] * 5
+    names = (
+        ["twin primes below n"] * 5
+        + ["twin primes above n"] * 3
+        + ["primes dividing n"] * 6
+        + ["twin towers"] * 6
+        + ["number of primes"] * 5
+    )
     labels = np.array([0] * 8 + [-1] * 17)
     assert layout.label_clusters(labels, names, [[]] * len(names)) == {0: ["twin primes", "below"]}
 
@@ -92,7 +136,13 @@ def test_label_ties_are_deterministic():
 
 
 def test_label_tokens_skip_stop_words_and_keep_keywords():
-    assert layout.tokens_for("Least prime whose twin primes are given", ["nonn", "hard"]) == {"prime", "twin", "primes", "twin primes", "kw:hard"}
+    assert layout.tokens_for("Least prime whose twin primes are given", ["nonn", "hard"]) == {
+        "prime",
+        "twin",
+        "primes",
+        "twin primes",
+        "kw:hard",
+    }
 
 
 def test_feature_names_follow_the_family_matrix_columns():
