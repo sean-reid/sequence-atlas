@@ -3,9 +3,22 @@ import { defineConfig, devices } from "@playwright/test";
 const port = 8787;
 const apiPort = 8789;
 
-// The API suite gets its own wrangler dev with its own state, since the rate
-// limit is keyed on 127.0.0.1 and would be shared with every page test.
+// Each wrangler dev gets its own persisted state: the API suite spends the
+// per-minute search budget, which is keyed on 127.0.0.1 and would otherwise
+// be shared with every page test.
+const pageState = ".wrangler/page-state";
 const apiState = ".wrangler/api-state";
+
+// One fixture feeds both stores: the data files the page loads and the
+// meta.tsv the search loader reads come from the same run.
+const seed = (state: string, data: string) =>
+  [
+    `rm -rf ${state}`,
+    `npx wrangler d1 migrations apply sequence-atlas --local --persist-to ${state}`,
+    `node scripts/fixture-data.ts ${data}`,
+    `node scripts/search-sql.ts ${data}/meta.tsv ${state}/fixture.sql`,
+    `npx wrangler d1 execute sequence-atlas --local --persist-to ${state} --file ${state}/fixture.sql`,
+  ].join(" && ");
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -50,17 +63,18 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `npm run build && node scripts/fixture-data.ts dist/data && npx wrangler dev --port ${port} --ip 127.0.0.1`,
+      command: [
+        "npm run build",
+        seed(pageState, "dist/data"),
+        `npx wrangler dev --port ${port} --ip 127.0.0.1 --persist-to ${pageState}`,
+      ].join(" && "),
       url: `http://127.0.0.1:${port}/api/health`,
       reuseExistingServer: false,
       timeout: 180_000,
     },
     {
       command: [
-        `rm -rf ${apiState}`,
-        `npx wrangler d1 migrations apply sequence-atlas --local --persist-to ${apiState}`,
-        `node scripts/search-sql.ts --fixture ${apiState}/fixture.sql`,
-        `npx wrangler d1 execute sequence-atlas --local --persist-to ${apiState} --file ${apiState}/fixture.sql`,
+        seed(apiState, `${apiState}/data`),
         `npx wrangler dev --port ${apiPort} --ip 127.0.0.1 --persist-to ${apiState}`,
       ].join(" && "),
       url: `http://127.0.0.1:${apiPort}/api/health`,

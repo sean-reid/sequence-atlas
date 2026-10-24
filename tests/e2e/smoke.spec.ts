@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { open } from "./helpers.ts";
 
 test("the front page loads the map", async ({ page }, info) => {
-  await page.goto("/");
+  await open(page, "/");
   await expect(page).toHaveTitle("sequence atlas");
   await expect(page.locator("h1")).toHaveText("sequence atlas");
-  await expect(page.locator("body[data-ready]")).toBeVisible();
   await expect(page.locator("#labels span").first()).toBeVisible();
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", /og\.jpg$/);
   expect((await page.request.get("/og.jpg")).status()).toBe(200);
