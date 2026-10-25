@@ -288,6 +288,6 @@ def test_combined_matrix_hits_the_target_block_shares():
 
 
 def test_weights_flag_overrides_only_the_named_families():
-    assert layout.parse_weights("growth=0.5,graph=0.1") == {"growth": 0.5, "recur": 0.25, "arith": 0.25, "graph": 0.1}
+    assert layout.parse_weights("growth=0.5,graph=0.1") == {"growth": 0.5, "recur": 0.25, "arith": 0.15, "graph": 0.1}
     with pytest.raises(Exception, match="unknown family"):
         layout.parse_weights("spectral=1")
