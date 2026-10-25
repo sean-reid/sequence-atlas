@@ -238,7 +238,11 @@ def name_islands(family, labels, numbers, names, keywords, color, indeg, knn):
             description += f"; {cov:.0%} mention '{phrase}'"
         famous = [short(names[i], int(numbers[i])) for i in ranked[:2]]
         description += f". Includes {', '.join(famous)}."
-        qualifier = next((head(names[i]) for i in ranked if head(names[i])), phrase)
+        # The qualifier is the best-known member with a clean name; for a kind,
+        # the best-known member of that kind.
+        pool = [i for i in rows.tolist() if kind in keywords[i]] if "kind" in found else rows.tolist()
+        pool = sorted(pool, key=lambda i: -fame(indeg[i], int(numbers[i]), keywords[i]))[:6]
+        qualifier = next((head(names[i]) for i in pool if head(names[i])), None)
         if qualifier and "kind" in found:
             qualifier = KIND_PREFIX.sub("", qualifier) or None
         results[c] = (label, description, qualifier)
@@ -246,8 +250,7 @@ def name_islands(family, labels, numbers, names, keywords, color, indeg, knn):
 
 
 def disambiguate(results):
-    """Repeated labels within a family gain a qualifier: the island's most cited
-    member when it has a clean name, else its phrase."""
+    """Repeated labels within a family gain a qualifier when the island has one."""
     counts = Counter(label for label, _, _ in results.values())
     out = {}
     for c, (label, description, qualifier) in results.items():
