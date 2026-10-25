@@ -15,6 +15,7 @@ export interface Manifest {
 export interface ClusterInfo {
   id: number;
   label: string;
+  description?: string;
   size: number;
   cx: number;
   cy: number;

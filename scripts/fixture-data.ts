@@ -83,6 +83,7 @@ function layout(family: string): void {
       sums.map((s, id) => ({
         id,
         label: labels[id],
+        description: `${s[2]} sequences, fixture island. Includes A000045.`,
         size: s[2],
         cx: s[0]! / s[2]!,
         cy: s[1]! / s[2]!,

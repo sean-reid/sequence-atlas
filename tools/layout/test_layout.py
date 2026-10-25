@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 import layout
-from atlas import codes, embed, features
+from atlas import codes, embed, features, names
 from atlas import format as fmt
 
 COLOR_COLUMNS = [
@@ -116,31 +116,70 @@ def test_shard_naming_and_grouping(tmp_path):
     assert sum(length for _, length in index.values()) == len(pack)
 
 
-def test_label_prefers_bigram_over_its_tokens():
-    names = (
-        ["twin primes below n"] * 5
-        + ["twin primes above n"] * 3
-        + ["primes dividing n"] * 6
-        + ["twin towers"] * 6
-        + ["number of primes"] * 5
+def test_head_keeps_the_naming_part_and_rejects_math_fragments():
+    assert names.head("Fibonacci numbers: F(n) = F(n-1) + F(n-2) with F(0) = 0 and F(1) = 1.") == "Fibonacci numbers"
+    assert (
+        names.head('Number of partially ordered sets ("posets") with n unlabeled elements.') == "partially ordered sets"
     )
-    labels = np.array([0] * 8 + [-1] * 17)
-    assert embed.label_clusters(labels, names, [[]] * len(names)) == {0: ["twin primes", "below"]}
+    assert names.head("a(n) = 2^n - 1. (Sometimes called Mersenne numbers.)") is None
+    assert names.head("If n = Product_{k >= 1} p_k^e_k then a(n) = n.") is None
+    assert names.head("Period 2: repeat [0, 1]; a(n) = n mod 2.") is None
+    assert names.head("Largest prime factor of n.") == "Largest prime factor of n"
+    assert names.head("Expansion of 16 * (q; q^2)_oo in powers of q.") is None
 
 
-def test_label_ties_are_deterministic():
-    scored = [(1.0, "zeta"), (1.0, "alpha"), (1.0, "beta gamma"), (1.0, "alpha beta")]
-    assert embed.pick_label(scored) == ["alpha beta", "zeta"]
-
-
-def test_label_tokens_skip_stop_words_and_keep_keywords():
-    assert embed.tokens_for("Least prime whose twin primes are given", ["nonn", "hard"]) == {
-        "prime",
-        "twin",
-        "primes",
-        "twin primes",
-        "kw:hard",
+def test_phrases_drop_keywords_stop_words_and_base_numbers():
+    assert names.phrases("Numbers whose base-6 representation has the same nonzero digits") == {
+        "base representation",
+        "representation has",
+        "base representation has",
+        "same nonzero",
+        "nonzero digits",
+        "same nonzero digits",
     }
+
+
+def island(n, name, kws, growth=5, order=0, cited=0):
+    return [(name, kws, growth, order, cited)] * n
+
+
+def naming(family, spec, n_knn_inside=20):
+    rows = [r for group in spec for r in group]
+    labels = np.array([i for i, group in enumerate(spec) for _ in group])
+    numbers = np.arange(1, len(rows) + 1, dtype=np.uint32)
+    text = [r[0] for r in rows]
+    kws = [r[1] for r in rows]
+    color = np.array([[r[2], r[3], 0] for r in rows], dtype=np.uint8)
+    cited = np.array([r[4] for r in rows])
+    # every row's neighbors are the first rows of its own island
+    knn = np.array([np.flatnonzero(labels == labels[i])[:20] for i in range(len(rows))])
+    return names.name_islands(family, labels, numbers, text, kws, color, cited, knn)
+
+
+def test_kind_outranks_a_famous_member_and_structure_leads_in_single_measure_maps():
+    cons = island(20, "Decimal expansion of Pi.", ["nonn", "cons"], growth=7)
+    cons[0] = ("Catalan numbers: C(n) = binomial(2n,n)/(n+1).", ["nonn", "core", "cons"], 7, 0, 5000)
+    expo = island(20, "Number of rooted trees with n nodes.", ["nonn"], growth=5, order=0)
+    expo[0] = ("Fibonacci numbers: F(n) = F(n-1) + F(n-2).", ["nonn", "core"], 5, 2, 5000)
+    named = naming("all", [cons, expo])
+    assert named[0][0] == "decimal expansions of constants"
+    assert named[1][0] == "Fibonacci numbers and relatives"
+    assert named[0][1].startswith(
+        "20 sequences, decimal expansions of constants, irregular growth; 95% mention 'decimal expansion'"
+    )
+    assert named[0][1].endswith(". Includes Catalan numbers, Decimal expansion of Pi.")
+    named = naming("growth", [cons, expo])
+    assert named[1][0] == "exponential growth"
+
+
+def test_mainland_without_structure_stays_mixed_and_duplicates_get_a_qualifier():
+    big = [(f"Sequence {i} with no pattern.", ["nonn"], i % 8, 0, 0) for i in range(60)]
+    big[0] = ("Moebius function mu(n).", ["nonn", "core"], 1, 0, 2000)
+    small = [(f"Entry {i} of no pattern.", ["nonn"], i % 8, 0, 0) for i in range(20)]
+    small[0] = ("Lucky numbers.", ["nonn", "nice"], 1, 0, 500)
+    named = naming("all", [big, small])
+    assert named[0][0] == "mixed, near Moebius function mu(n)"
+    assert named[1][0] == "mixed, near Lucky numbers"
 
 
 def test_feature_names_follow_the_family_matrix_columns():
