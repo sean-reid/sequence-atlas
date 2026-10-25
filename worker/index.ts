@@ -164,7 +164,10 @@ async function cached(
   const hit = await cache.match(key);
   if (hit) return hit;
   const response = await make();
-  if (response.ok) ctx.waitUntil(cache.put(key, response.clone()));
+  // A manually encoded body comes back from the cache encoded twice, so those
+  // are read from storage every time.
+  if (response.ok && !response.headers.has("content-encoding"))
+    ctx.waitUntil(cache.put(key, response.clone()));
   return response;
 }
 
