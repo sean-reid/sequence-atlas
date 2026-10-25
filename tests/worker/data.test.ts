@@ -54,6 +54,13 @@ describe("objects", () => {
     expect(await decoded(res)).toEqual(clusters);
   });
 
+  it("still decodes a gzipped .u16 on the second request", async () => {
+    await get(`/data/${PREFIX}/all.cluster.u16`);
+    const again = await get(`/data/${PREFIX}/all.cluster.u16`);
+    expect(again.headers.get("content-encoding")).toBe("gzip");
+    expect(await decoded(again)).toEqual(clusters);
+  });
+
   it("serves a raw layout without an encoding", async () => {
     const res = await get(`/data/${PREFIX}/all.layout.bin`);
     expect(res.status).toBe(200);
