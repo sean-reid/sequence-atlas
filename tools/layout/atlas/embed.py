@@ -1,5 +1,6 @@
 """Neighbor graphs, UMAP, HDBSCAN, and the columns that explain a neighbor."""
 
+import math
 import time
 
 import numpy as np
@@ -20,6 +21,8 @@ PARAMS = {
     "max_cluster_fraction": 0.05,
     "assign_k": 7,
     "name_kind_share": 0.5,
+    "name_kind_strong": 0.8,
+    "name_phrase_lift": math.log(3),
     "name_structure_share": 0.5,
     "name_phrase_share": 0.25,
     "name_exemplar_refs": 100,

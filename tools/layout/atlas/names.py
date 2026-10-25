@@ -104,19 +104,26 @@ WORD = re.compile(r"[a-z][a-z0-9'-]*")
 HEAD_SPLIT = re.compile(r":|\s\(|;|, the |, also|, or |, where|\. ")
 HEAD_STRIP = re.compile(r"^(The |Number of |a\(n\) (is|=) )")
 HEAD_REJECT = re.compile(
-    r"[{}<>_=*+/^|\[\]]|\bA\d{6}\b|^(if|from|let|for|a\(\d)\b|\b(of|and|the|or|by|with|for|in|to|minus|plus|times)$|^period \d",
+    r"[{}<>_=*+/^|\[\]\"()]"
+    r"|\bA\d{6}\b"
+    r"|^(if|from|let|for|a\(\d|expansion of|triangle read|array read|table read|irregular triangle|numbers? [a-z] such|length of)\b"
+    r"|\b(of|and|the|or|by|with|for|in|to|from|into|within|that|such|whose|which|minus|plus|times|[eo]\.g\.f)$"
+    r"|^period \d",
     re.IGNORECASE,
 )
 HEAD_MAX = 36
+HEAD_MIN_LETTERS = 6
+# A qualifier drawn from a member of a kind drops the kind's own words.
+KIND_PREFIX = re.compile(r"^(decimal expansion of|continued fraction (for|of|expansion of)) (the )?", re.IGNORECASE)
 
 
 def head(name):
     """The naming part of an OEIS name, or None when the name has no clean short form."""
     s = HEAD_SPLIT.split(name, 1)[0].strip().rstrip(".")
-    s = HEAD_STRIP.sub("", s).strip().strip('"')
+    s = HEAD_STRIP.sub("", s).strip()
     if not 3 <= len(s) <= HEAD_MAX or HEAD_REJECT.search(s):
         return None
-    if sum(ch.isalpha() for ch in s) < 4:
+    if sum(ch.isalpha() for ch in s) < HEAD_MIN_LETTERS:
         return None
     return s
 
@@ -180,7 +187,8 @@ def name_islands(family, labels, numbers, names, keywords, color, indeg, knn):
         kws = [set(keywords[i]) for i in rows]
         found = {}
         kind, kind_n = (Counter(k for ks in kws for k in ks if k in KINDS).most_common(1) or [(None, 0)])[0]
-        if kind and kind_n / m >= PARAMS["name_kind_share"]:
+        kind_share = kind_n / m
+        if kind and kind_share >= PARAMS["name_kind_share"]:
             found["kind"] = KINDS[kind]
         g, g_n = Counter(color[rows, 0].tolist()).most_common(1)[0]
         if g_n / m >= PARAMS["name_structure_share"]:
@@ -196,9 +204,12 @@ def name_islands(family, labels, numbers, names, keywords, color, indeg, knn):
             share = cnt / m
             if share < PARAMS["name_phrase_share"]:
                 continue
-            score = share * math.log(share / (corpus[g_] / n_total))
-            if score > best:
-                phrase, best, cov = g_, score, share
+            # Among phrases at least three times as common here as in the corpus,
+            # the one most members share wins over the rarest.
+            if math.log(share / (corpus[g_] / n_total)) < PARAMS["name_phrase_lift"]:
+                continue
+            if share > best:
+                phrase, best, cov = g_, share, share
         if phrase:
             found["phrase"] = phrase
         ranked = sorted(rows.tolist(), key=lambda i: -fame(indeg[i], int(numbers[i]), keywords[i]))[:6]
@@ -219,7 +230,8 @@ def name_islands(family, labels, numbers, names, keywords, color, indeg, knn):
                 break
         if exemplar is not None and not mainland:
             found["exemplar"] = f"{head(names[exemplar])} and relatives"
-        label = next((found[r] for r in rules if r in found), "mixed")
+        order = ("kind", *rules) if kind_share >= PARAMS["name_kind_strong"] else rules
+        label = next((found[r] for r in order if r in found), "mixed")
         structure = ", ".join(found[k] for k in ("kind", "growth", "order") if k in found) or "mixed"
         description = f"{m:,} sequences, {structure}"
         if phrase:
@@ -227,6 +239,8 @@ def name_islands(family, labels, numbers, names, keywords, color, indeg, knn):
         famous = [short(names[i], int(numbers[i])) for i in ranked[:2]]
         description += f". Includes {', '.join(famous)}."
         qualifier = next((head(names[i]) for i in ranked if head(names[i])), phrase)
+        if qualifier and "kind" in found:
+            qualifier = KIND_PREFIX.sub("", qualifier) or None
         results[c] = (label, description, qualifier)
     return disambiguate(results)
 

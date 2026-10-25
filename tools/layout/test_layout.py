@@ -164,9 +164,7 @@ def test_kind_outranks_a_famous_member_and_structure_leads_in_single_measure_map
     named = naming("all", [cons, expo])
     assert named[0][0] == "decimal expansions of constants"
     assert named[1][0] == "Fibonacci numbers and relatives"
-    assert named[0][1].startswith(
-        "20 sequences, decimal expansions of constants, irregular growth; 95% mention 'decimal expansion'"
-    )
+    assert named[0][1].startswith("20 sequences, decimal expansions of constants, irregular growth")
     assert named[0][1].endswith(". Includes Catalan numbers, Decimal expansion of Pi.")
     named = naming("growth", [cons, expo])
     assert named[1][0] == "exponential growth"
@@ -174,11 +172,11 @@ def test_kind_outranks_a_famous_member_and_structure_leads_in_single_measure_map
 
 def test_mainland_without_structure_stays_mixed_and_duplicates_get_a_qualifier():
     big = [(f"Sequence {i} with no pattern.", ["nonn"], i % 8, 0, 0) for i in range(60)]
-    big[0] = ("Moebius function mu(n).", ["nonn", "core"], 1, 0, 2000)
+    big[0] = ("Moebius function.", ["nonn", "core"], 1, 0, 2000)
     small = [(f"Entry {i} of no pattern.", ["nonn"], i % 8, 0, 0) for i in range(20)]
     small[0] = ("Lucky numbers.", ["nonn", "nice"], 1, 0, 500)
     named = naming("all", [big, small])
-    assert named[0][0] == "mixed, near Moebius function mu(n)"
+    assert named[0][0] == "mixed, near Moebius function"
     assert named[1][0] == "mixed, near Lucky numbers"
 
 
