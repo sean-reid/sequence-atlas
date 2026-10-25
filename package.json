@@ -10,19 +10,22 @@
   },
   "scripts": {
     "dev": "wrangler dev",
+    "dev:data": "node scripts/dev-data.ts",
     "fixture": "node scripts/fixture-data.ts dist/data && node scripts/search-sql.ts dist/data/meta.tsv dist/fixture.sql && wrangler d1 migrations apply sequence-atlas --local && wrangler d1 execute sequence-atlas --local --file dist/fixture.sql",
     "dev:web": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p worker/tsconfig.json && tsc -p tests/worker/tsconfig.json",
     "lint": "eslint src worker shared scripts tests vite.config.ts playwright.config.ts eslint.config.js prettier.config.js --max-warnings 0",
     "format": "prettier --write src worker shared scripts tests index.html vite.config.ts playwright.config.ts eslint.config.js prettier.config.js package.json tsconfig.json wrangler.jsonc release-please-config.json .github",
     "format:check": "prettier --check src worker shared scripts tests index.html vite.config.ts playwright.config.ts eslint.config.js prettier.config.js package.json tsconfig.json wrangler.jsonc release-please-config.json .github",
     "test": "vitest run",
+    "test:worker": "vitest run --config tests/worker/vitest.config.ts",
     "size": "node scripts/size.ts",
     "test:e2e": "playwright test",
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.7",
     "@cloudflare/workers-types": "^5.20261019.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",

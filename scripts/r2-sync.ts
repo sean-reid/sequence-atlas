@@ -1,9 +1,11 @@
-// Uploads the artifact directory to the R2 bucket through the Cloudflare REST
-// API, sending only objects whose content hash differs from the hashes.json
-// recorded by the previous sync, then writes the new hashes.json last.
+// Uploads the artifact directory to the R2 bucket, sending only objects whose
+// content hash differs from the hashes.json recorded by the previous sync,
+// then writes the new hashes.json last.
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { gzipSync } from "node:zlib";
+import { env, GZIP_KINDS, r2Get, r2Put } from "./cloudflare.ts";
 
 const dir = process.argv[2] ?? "";
 const prefix = process.argv[3] ?? "";
@@ -11,15 +13,7 @@ if (!dir || !prefix) {
   console.error("usage: node scripts/r2-sync.ts <artifact-dir> <key-prefix>");
   process.exit(2);
 }
-const token = process.env.CLOUDFLARE_API_TOKEN;
-const account = process.env.CLOUDFLARE_ACCOUNT_ID;
-const bucket = process.env.R2_BUCKET ?? "sequence-atlas";
-if (!token || !account) {
-  console.error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required");
-  process.exit(2);
-}
-const base = `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/objects/`;
-const headers = { authorization: `Bearer ${token}` };
+env("usage: node scripts/r2-sync.ts <artifact-dir> <key-prefix>");
 const CONCURRENCY = 6;
 
 function walk(root: string): string[] {
@@ -39,25 +33,8 @@ function walk(root: string): string[] {
 }
 
 async function remoteHashes(): Promise<Record<string, string>> {
-  const res = await fetch(`${base}${encodeURIComponent(`${prefix}/hashes.json`)}`, { headers });
-  if (res.status === 404) return {};
-  if (!res.ok) throw new Error(`hashes.json: ${res.status}`);
-  return (await res.json()) as Record<string, string>;
-}
-
-async function put(key: string, body: Buffer, type: string): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    const res = await fetch(`${base}${encodeURIComponent(key)}`, {
-      method: "PUT",
-      headers: { ...headers, "content-type": type },
-      body: new Blob([Uint8Array.from(body)]),
-    });
-    if (res.ok) return;
-    if (attempt >= 12) throw new Error(`${key}: ${res.status} ${await res.text()}`);
-    // The API allows about 1,200 requests per five minutes; back off and retry.
-    const wait = res.status === 429 ? 15_000 : 1000 * attempt;
-    await new Promise((r) => setTimeout(r, wait));
-  }
+  const res = await r2Get(`${prefix}/hashes.json`);
+  return res ? ((await res.json()) as Record<string, string>) : {};
 }
 
 const files = walk(dir);
@@ -78,14 +55,19 @@ async function worker(): Promise<void> {
   while (cursor < changed.length) {
     const rel = changed[cursor++]!;
     const type = rel.endsWith(".json") ? "application/json" : "application/octet-stream";
-    await put(`${prefix}/${rel}`, readFileSync(join(dir, rel)), type);
+    const body = readFileSync(join(dir, rel));
+    if (GZIP_KINDS.test(rel)) {
+      await r2Put(`${prefix}/${rel}`, gzipSync(body), type, { "content-encoding": "gzip" });
+    } else {
+      await r2Put(`${prefix}/${rel}`, body, type);
+    }
     done++;
     if (done % 500 === 0) console.log(`${done}/${changed.length}`);
   }
 }
 await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-const hashes = Buffer.from(JSON.stringify(next));
-await put(`${prefix}/hashes.json`, hashes, "application/json");
+const hashes = JSON.stringify(next);
+await r2Put(`${prefix}/hashes.json`, hashes, "application/json");
 // The manifest step digests this file into the build id that keys every data URL.
 writeFileSync(join(dir, "hashes.json"), hashes);
 console.log(`uploaded ${done} objects under ${prefix}`);

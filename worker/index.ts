@@ -53,7 +53,12 @@ async function serveData(request: Request, env: Env, key: string): Promise<Respo
       : "public, max-age=300",
     etag: object.httpEtag,
   });
-  return new Response(object.body, { headers });
+  // Cluster, color, and number files are stored gzipped; the runtime must not
+  // compress them a second time.
+  if (object.httpMetadata?.contentEncoding !== "gzip")
+    return new Response(object.body, { headers });
+  headers.set("content-encoding", "gzip");
+  return new Response(object.body, { headers, encodeBody: "manual" });
 }
 
 // Shards of one kind live in a single pack object; the index maps a shard name
@@ -126,6 +131,11 @@ async function serveShard(
   });
 }
 
+// The bucket serves two shapes of key and nothing else: the manifest, and a
+// path under a generation. Anything else is a 404 before storage is asked.
+const KEY = /^(manifest\.json|v\/[0-9a-z-]+\/[A-Za-z0-9._/-]+)$/;
+const allowedKey = (key: string): boolean => KEY.test(key) && !key.split("/").includes("..");
+
 // One host owns a whole IPv6 /64, so the budget is per /64 there and per address on IPv4.
 function rateKey(request: Request): string {
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
@@ -150,10 +160,11 @@ async function cached(
   make: () => Promise<Response>,
 ): Promise<Response> {
   const cache = caches.default;
-  const hit = await cache.match(request);
+  const key = request.method === "GET" ? request : new Request(request.url);
+  const hit = await cache.match(key);
   if (hit) return hit;
   const response = await make();
-  if (response.ok) ctx.waitUntil(cache.put(request, response.clone()));
+  if (response.ok) ctx.waitUntil(cache.put(key, response.clone()));
   return response;
 }
 
@@ -172,7 +183,7 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
     } catch {
       return error(404, "not found");
     }
-    if (!key) return error(404, "not found");
+    if (!allowedKey(key)) return error(404, "not found");
     const shard = /^(v\/[^/]+)\/shards\/([a-z]+)\/(\d{5})\.json$/.exec(key);
     // Shard members are pre-compressed and the cache would hand them back
     // re-encoded, so only whole objects go through the edge cache.

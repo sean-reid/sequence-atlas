@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { env, r2Put } from "./cloudflare.ts";
 
 const dir = process.argv[2] ?? "";
 const prefix = process.argv[3] ?? "";
@@ -10,13 +11,7 @@ if (!dir || !prefix) {
   console.error("usage: node scripts/r2-manifest.ts <artifact-dir> <key-prefix>");
   process.exit(2);
 }
-const token = process.env.CLOUDFLARE_API_TOKEN;
-const account = process.env.CLOUDFLARE_ACCOUNT_ID;
-const bucket = process.env.R2_BUCKET ?? "sequence-atlas";
-if (!token || !account) {
-  console.error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required");
-  process.exit(2);
-}
+env("usage: node scripts/r2-manifest.ts <artifact-dir> <key-prefix>");
 const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Record<
   string,
   unknown
@@ -30,18 +25,7 @@ if (!existsSync(hashes)) {
   process.exit(1);
 }
 manifest.build = createHash("md5").update(readFileSync(hashes)).digest("hex").slice(0, 12);
-const res = await fetch(
-  `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${bucket}/objects/manifest.json`,
-  {
-    method: "PUT",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(manifest),
-  },
-);
-if (!res.ok) {
-  console.error(`manifest: ${res.status} ${await res.text()}`);
-  process.exit(1);
-}
+await r2Put("manifest.json", JSON.stringify(manifest), "application/json");
 console.log(
   `manifest now points at ${manifest.version} build ${manifest.build} with ${manifest.count} sequences`,
 );
