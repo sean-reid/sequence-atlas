@@ -106,8 +106,8 @@ HEAD_STRIP = re.compile(r"^(The |Number of |a\(n\) (is|=) )")
 HEAD_REJECT = re.compile(
     r"[{}<>_=*+/^|\[\]\"()]"
     r"|\bA\d{6}\b"
-    r"|^(if|from|let|for|a\(\d|expansion of|triangle read|array read|table read|irregular triangle|numbers? [a-z] such|length of)\b"
-    r"|\b(of|and|the|or|by|with|for|in|to|from|into|within|that|such|whose|which|minus|plus|times|[eo]\.g\.f)$"
+    r"|^(if|in|on|at|from|let|for|a\(\d|expansion of|triangle read|array read|table read|irregular triangle|numbers? [a-z] such|length of)\b"
+    r"|\b(of|and|the|or|by|with|for|in|to|from|into|within|that|such|whose|which|all|each|every|minus|plus|times|[eo]\.g\.f)$"
     r"|^period \d",
     re.IGNORECASE,
 )
