@@ -16,6 +16,9 @@ test("a point outside every island gets no island sentence", async ({ page }) =>
   await open(page, "/A000045");
   await expect(page.locator("#p-summary")).toContainText("sits in the island");
   await expect(page.locator("#p-summary .cluster")).toHaveText("decimal expansion");
+  await expect(page.locator("#p-summary")).toContainText(
+    "sequences, fixture island. Includes A000045.",
+  );
   await open(page, "/A000050");
   await expect(page.locator("#p-name")).toHaveText("Fixture sequence 50 of primes congruent.");
   await expect(page.locator("#p-summary")).toHaveText("quadratic growth.");
