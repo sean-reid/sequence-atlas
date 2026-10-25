@@ -102,6 +102,7 @@ export class Panel {
       strong.className = "cluster";
       strong.textContent = cluster.label;
       summary.append(strong, ".");
+      if (cluster.description) summary.append(` ${cluster.description}`);
     }
     el("p-summary").replaceChildren(summary);
 

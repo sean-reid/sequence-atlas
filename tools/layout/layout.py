@@ -24,7 +24,7 @@ import numpy as np
 
 from atlas import log
 from atlas.codes import GROWTH_CLASSES, KEYWORD_LABELS, LABELS, color_codes, histogram
-from atlas.embed import PARAMS, cluster, embed, explain, knn_graph, label_clusters
+from atlas.embed import PARAMS, cluster, embed, explain, knn_graph
 from atlas.features import FAMILIES, family_matrix, feature_names, graph_features, load, needs_graph, standardize, take
 from atlas.format import (
     FORMAT,
@@ -37,6 +37,7 @@ from atlas.format import (
     write_manifest,
     write_shard_pack,
 )
+from atlas.names import citations, name_islands
 
 
 def run_embed(features_dir, out, families, sample, epochs):
@@ -49,6 +50,8 @@ def run_embed(features_dir, out, families, sample, epochs):
     log(f"loaded {X.shape[0]} sequences, {X.shape[1]} features")
     numbers.tofile(out / "numbers.u32")
     graph = graph_features(numbers, keywords, data.xrefs) if needs_graph(families) else None
+    color = color_codes(X, cols, keywords)
+    cited = citations(numbers, data.xrefs)
 
     report = {"count": len(numbers), "params": PARAMS, "families": {}}
     probes = [45, 40, 290, 108, 5132, 2, 796, 10, 142, 1006]
@@ -59,22 +62,9 @@ def run_embed(features_dir, out, families, sample, epochs):
         knn = knn_graph(M, out / f"{family}.knn.npz")
         Y = embed(M, knn, out / f"{family}.embedding.npy", epochs)
         labels = cluster(Y)
-        label_text = label_clusters(labels, names, keywords)
         write_layout(out / f"{family}.layout.bin", Y)
         np.where(labels < 0, NOISE, labels).astype(np.uint16).tofile(out / f"{family}.cluster.u16")
-        clusters = []
-        for c, toks in label_text.items():
-            m = labels == c
-            clusters.append(
-                {
-                    "id": int(c),
-                    "label": " ".join(toks),
-                    "size": int(m.sum()),
-                    "cx": float(Y[m, 0].mean()),
-                    "cy": float(Y[m, 1].mean()),
-                }
-            )
-        clusters.sort(key=lambda c: -c["size"])
+        clusters = cluster_entries(family, labels, Y, data, color, cited, knn[0][:, 1 : NEIGHBORS + 1])
         (out / f"{family}.clusters.json").write_text(json.dumps(clusters))
         nn = knn[0][:, 1:]
         sample_nn = {}
@@ -91,6 +81,42 @@ def run_embed(features_dir, out, families, sample, epochs):
     report["seconds"] = round(time.time() - t0)
     (out / f"report-{'-'.join(families)}.json").write_text(json.dumps(report, indent=1))
     log(f"done in {report['seconds']}s")
+
+
+def cluster_entries(family, labels, Y, data, color, cited, nn):
+    named = name_islands(family, labels, data.numbers, data.names, data.keywords, color, cited, nn)
+    clusters = []
+    for c, (label, description) in named.items():
+        m = labels == c
+        clusters.append(
+            {
+                "id": int(c),
+                "label": label,
+                "description": description,
+                "size": int(m.sum()),
+                "cx": float(Y[m, 0].mean()),
+                "cy": float(Y[m, 1].mean()),
+            }
+        )
+    clusters.sort(key=lambda c: -c["size"])
+    return clusters
+
+
+def run_labels(features_dir, out):
+    """Rename the islands of an existing artifact set from its layouts, clusters, and neighbor graphs."""
+    t0 = time.time()
+    data, numbers, _graph = load_for(features_dir, out)
+    color = color_codes(data.X, data.cols, data.keywords)
+    cited = citations(numbers, data.xrefs)
+    for family in [f for f in FAMILIES if (out / f"{f}.knn.npz").exists()]:
+        codes = np.fromfile(out / f"{family}.cluster.u16", dtype=np.uint16)
+        labels = np.where(codes == NOISE, -1, codes.astype(np.int64))
+        Y, _bounds = read_layout(out / f"{family}.layout.bin")
+        nn = np.load(out / f"{family}.knn.npz")["idx"][:, 1 : NEIGHBORS + 1]
+        clusters = cluster_entries(family, labels, Y, data, color, cited, nn)
+        (out / f"{family}.clusters.json").write_text(json.dumps(clusters))
+        log(f"{family}: {len(clusters)} islands, largest {clusters[0]['size']}: {clusters[0]['label']}")
+    log(f"done in {time.time() - t0:.0f}s")
 
 
 def load_for(features_dir, out):
@@ -264,6 +290,9 @@ def main():
     shards_cmd.add_argument("features", type=Path)
     shards_cmd.add_argument("out", type=Path)
     shards_cmd.add_argument("--snapshot", required=True)
+    labels_cmd = commands.add_parser("labels", help="rename the islands of an artifact set without re-embedding")
+    labels_cmd.add_argument("features", type=Path)
+    labels_cmd.add_argument("out", type=Path)
     place_cmd = commands.add_parser("place", help="add new sequences to frozen layouts, then write shards")
     place_cmd.add_argument("features", type=Path)
     place_cmd.add_argument("prev", type=Path)
@@ -275,6 +304,8 @@ def main():
         if args.weights:
             PARAMS["combined_weights"] = args.weights
         run_embed(args.features, args.out, args.families.split(","), args.sample, args.epochs)
+    elif args.command == "labels":
+        run_labels(args.features, args.out)
     elif args.command == "shards":
         data, numbers, graph = load_for(args.features, args.out)
         run_shards(args.out, args.snapshot, data, numbers, graph)

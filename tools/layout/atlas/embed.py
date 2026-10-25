@@ -1,9 +1,7 @@
-"""Neighbor graphs, UMAP, HDBSCAN, cluster labels, and the columns that explain a neighbor."""
+"""Neighbor graphs, UMAP, HDBSCAN, and the columns that explain a neighbor."""
 
-import itertools
-import re
+import math
 import time
-from collections import Counter
 
 import numpy as np
 
@@ -22,9 +20,15 @@ PARAMS = {
     "min_samples": 10,
     "max_cluster_fraction": 0.05,
     "assign_k": 7,
-    "label_min_count": 5,
-    "label_min_share": 0.05,
-    "label_smoothing": 0.5,
+    "name_kind_share": 0.5,
+    "name_kind_strong": 0.8,
+    "name_phrase_lift": math.log(3),
+    "name_structure_share": 0.5,
+    "name_phrase_share": 0.25,
+    "name_exemplar_refs": 100,
+    "name_exemplar_ratio": 20,
+    "name_exemplar_cohesion": 0.7,
+    "name_mainland_share": 0.02,
     "explain_chunk": 20_000,
     "explain_gap_weight": 2.0,
     "place_chunk": 256,
@@ -37,17 +41,6 @@ PARAMS = {
     "combined_drop_moduli": [4, 6, 10],
 }
 KNN_K = NEIGHBORS + 1
-LABEL_WORDS = 3
-TOKEN = re.compile(r"[a-z][a-z'-]{2,}")
-STOP_WORDS = """
-a an the of for and or with in to on by at is are as that which whose where from into
-than not no if all one two such its this be when then also each any other over under
-number numbers sequence sequences term terms integer integers n k m x y z read rows row
-expansion coefficients coefficient function triangle array table partial sums sum
-satisfies exists form smallest least only more look taken consisting having gives given
-equal equals exactly first using whose into such
-"""
-STOP = frozenset(STOP_WORDS.split())
 
 
 def knn_graph(M, cache):
@@ -121,62 +114,6 @@ def cluster(Y):
         f"hdbscan: {k} clusters, {noise:.1%} noise, largest {largest}, min size {size}, cap {cap}, sample {len(pick)}, in {time.time() - t:.0f}s"
     )
     return labels
-
-
-def tokens_for(name, kws):
-    words = TOKEN.findall(name.lower())
-    toks = {t for t in words if t not in STOP}
-    toks |= {f"{a} {b}" for a, b in itertools.pairwise(words) if a not in STOP and b not in STOP}
-    toks |= {f"kw:{k}" for k in kws if k not in ("nonn", "changed", "new", "easy", "sign")}
-    return toks
-
-
-def pick_label(scored):
-    """Highest scoring tokens up to LABEL_WORDS words. A bigram is eligible when
-    it scores at least the best single token; ties go to the bigram, then to
-    the alphabetically first text, so the label does not depend on set order."""
-    best_single = max((s for s, t in scored if " " not in t), default=-np.inf)
-    scored = sorted(scored, key=lambda st: (-st[0], " " not in st[1], st[1]))
-    words, out = set(), []
-    for score, tok in scored:
-        parts = tok.split()
-        if len(parts) > 1 and score < best_single:
-            continue
-        if words & set(parts) or len(words) + len(parts) > LABEL_WORDS:
-            continue
-        out.append(tok)
-        words |= set(parts)
-        if len(words) == LABEL_WORDS:
-            break
-    return out
-
-
-def label_clusters(labels, names, keywords):
-    docs = [tokens_for(n, k) for n, k in zip(names, keywords, strict=True)]
-    corpus = Counter()
-    for d in docs:
-        corpus.update(d)
-    total = len(docs)
-    smooth = PARAMS["label_smoothing"]
-    out = {}
-    for c in range(labels.max() + 1):
-        members = np.flatnonzero(labels == c)
-        counts = Counter()
-        for i in members:
-            counts.update(docs[i])
-        n_in = len(members)
-        scored = []
-        for tok, c_in in counts.items():
-            if c_in < max(PARAMS["label_min_count"], n_in * PARAMS["label_min_share"]):
-                continue
-            c_out = corpus[tok] - c_in
-            n_out = total - n_in
-            p_in = (c_in + smooth) / (n_in + 1)
-            p_out = (c_out + smooth) / (n_out + 1)
-            lift = np.log(p_in / p_out)
-            scored.append((lift * np.sqrt(c_in / n_in), tok))
-        out[c] = [t.removeprefix("kw:") for t in pick_label(scored)]
-    return out
 
 
 def explain(Z, nn, limit=2):
