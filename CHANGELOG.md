@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/sean-reid/sequence-atlas/compare/sequence-atlas-v0.1.0...sequence-atlas-v0.2.0) (2026-10-25)
+
+
+### Features
+
+* **tools:** split layout.py, publish labels, place inside the voted island, tame hubs, test the math ([#43](https://github.com/sean-reid/sequence-atlas/issues/43)) ([3b69ef5](https://github.com/sean-reid/sequence-atlas/commit/3b69ef525e7b612b5f7f7377ad4bbf389860753e))
+* **tools:** weight the combined map growth 35, recurrence 25, arithmetic 15, references 25 ([#48](https://github.com/sean-reid/sequence-atlas/issues/48)) ([e787134](https://github.com/sean-reid/sequence-atlas/commit/e787134c5f7112d062591369a50a17f747031aa3))
+* **worker:** one cloudflare client, gzip on the wire, key allowlist, search bounds, pinned actions, dev data, worker tests ([#46](https://github.com/sean-reid/sequence-atlas/issues/46)) ([465295b](https://github.com/sean-reid/sequence-atlas/commit/465295b9a0bb5acc55184baa8443ba3f7ea03967))
+
+
+### Bug Fixes
+
+* **style:** re-step the ramps and darken the light categorical set for contrast ([#47](https://github.com/sean-reid/sequence-atlas/issues/47)) ([6dc9dd5](https://github.com/sean-reid/sequence-atlas/commit/6dc9dd51126038bae65b65714ce39b49b30c308c))
+* **worker:** keep gzipped objects out of the edge cache ([#49](https://github.com/sean-reid/sequence-atlas/issues/49)) ([b471101](https://github.com/sean-reid/sequence-atlas/commit/b471101861e5a15f574ce08d02e39bcadb3a1572))
+
 ## 0.1.0 (2026-10-16)
 
 
