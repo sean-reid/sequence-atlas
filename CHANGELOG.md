@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sean-reid/sequence-atlas/compare/sequence-atlas-v0.2.0...sequence-atlas-v0.3.0) (2026-10-25)
+
+
+### Features
+
+* **tools:** name islands by kind, best-known member, shared phrase, or structure ([#50](https://github.com/sean-reid/sequence-atlas/issues/50)) ([0e8531d](https://github.com/sean-reid/sequence-atlas/commit/0e8531dcc5c1a7e92049438d9a021d6176dd65ec))
+
 ## [0.2.0](https://github.com/sean-reid/sequence-atlas/compare/sequence-atlas-v0.1.0...sequence-atlas-v0.2.0) (2026-10-25)
 
 
