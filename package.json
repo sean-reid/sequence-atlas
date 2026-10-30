@@ -25,7 +25,7 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.7",
+    "@cloudflare/vitest-plugin": "^1.4.8",
     "@cloudflare/workers-types": "^5.20261019.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
