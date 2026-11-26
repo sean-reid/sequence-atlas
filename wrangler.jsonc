@@ -31,5 +31,5 @@
   "r2_buckets": [{ "binding": "DATA", "bucket_name": "sequence-atlas" }],
   "workers_dev": true,
   "preview_urls": true,
-  "routes": [{ "pattern": "sequence-atlas.dwainosaur.com", "custom_domain": true }],
+  "routes": [{ "pattern": "sequence-atlas.seanre.id", "custom_domain": true }],
 }
